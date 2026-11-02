@@ -1,5 +1,5 @@
 // Biringan Employee Management System - frontend logic
-// Talks to the Flask API in app.py (/api/dashboard, /api/employees, ...)
+// Talks to the Flask API in main.py / routes/admin.py (/api/dashboard, /api/employees, ...)
 
 const state = { page: 1, perPage: 10, search: "", status: "" };
 
@@ -18,6 +18,8 @@ function setText(id, value) {
     if (el) el.textContent = value;
 }
 
+const byId = (id) => document.getElementById(id);
+
 // ---------------------------------------------------------------- Dashboard
 async function loadDashboard() {
     try {
@@ -27,6 +29,7 @@ async function loadDashboard() {
         setText("total-departments", d.total_departments);
         setText("total-positions", d.total_positions);
         setText("pending-leaves", d.pending_leaves);
+        updateBell(d.pending_leaves);
 
         const list = document.getElementById("activity-list");
         list.innerHTML = "";
@@ -115,7 +118,7 @@ async function deleteEmployee(id, name) {
 }
 
 // ---------------------------------------------------------------- Page navigation
-// Shows one sidebar page. Used by the sidebar links AND the dashboard cards.
+// Shows one sidebar page. Used by the sidebar, the account menu AND the dashboard cards.
 function showSection(section) {
     document.querySelectorAll(".sidebar nav li").forEach((x) =>
         x.classList.toggle("active", x.dataset.section === section));
@@ -129,20 +132,99 @@ function showSection(section) {
     if (section === "positions") loadPositions();
     if (section === "salaries") loadSalaries();
     if (section === "leaves") loadLeaves();
+    if (section === "reports") loadReports();
+    if (section === "setting") loadSettings();
 
     document.querySelector(".main-content").scrollTop = 0;
+}
+
+// ---------------------------------------------------------------- Topbar (menu, bell, account)
+function initialsOf(name) {
+    const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return "–";
+    const first = parts[0][0];
+    const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
+    return (first + last).toUpperCase();
+}
+
+async function loadHeaderUser() {
+    try {
+        const p = await api("/api/settings/profile");
+        const name = p.name || p.email || "Administrator";
+        setText("header-name", name);
+        setText("avatar", initialsOf(name));
+    } catch (err) {
+        setText("header-name", "Administrator");
+        setText("avatar", "A");
+    }
+}
+
+function updateBell(pending) {
+    const dot = byId("bell-dot");
+    const n = Number(pending) || 0;
+    dot.hidden = n === 0;
+    byId("bell").setAttribute(
+        "aria-label",
+        n ? n + " pending leave request" + (n === 1 ? "" : "s") : "No pending leave requests"
+    );
+}
+
+function setSidebar(open) {
+    byId("sidebar").classList.toggle("collapsed", !open);
+    byId("menu-toggle").setAttribute("aria-expanded", String(open));
+    byId("menu-toggle").querySelector("i").className =
+        open ? "far fa-square-caret-left" : "far fa-square-caret-right";
+}
+
+function setUserMenu(open) {
+    byId("user-menu").hidden = !open;
+    byId("user-btn").setAttribute("aria-expanded", String(open));
 }
 
 // ---------------------------------------------------------------- Events
 document.addEventListener("DOMContentLoaded", () => {
     loadDashboard();
     loadEmployees();
+    loadHeaderUser();
+
+    // Sidebar starts closed on phones
+    if (window.matchMedia("(max-width: 700px)").matches) setSidebar(false);
+    byId("menu-toggle").addEventListener("click", () =>
+        setSidebar(byId("sidebar").classList.contains("collapsed")));
+
+    // Account menu
+    byId("user-btn").addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        setUserMenu(byId("user-menu").hidden);
+    });
+    byId("user-menu").addEventListener("click", (ev) => {
+        const item = ev.target.closest("[data-section]");
+        if (item) showSection(item.dataset.section);
+        setUserMenu(false);
+    });
+    document.addEventListener("click", (ev) => {
+        if (!ev.target.closest(".user-menu")) setUserMenu(false);
+    });
+    document.addEventListener("keydown", (ev) => {
+        if (ev.key === "Escape") setUserMenu(false);
+    });
+
+    // Bell jumps to pending leave requests
+    byId("bell").addEventListener("click", () => {
+        byId("leave-filter").value = "Pending";
+        showSection("leaves");
+    });
+
+    // Help buttons (topbar + sidebar)
+    document.querySelectorAll("[data-action='help']").forEach((b) =>
+        b.addEventListener("click", () =>
+            toast("Need help? Contact the system owner or your IT support.", "info")));
 
     const searchInput = document.getElementById("search-input");
     const runSearch = () => {
         state.search = searchInput.value.trim();
         state.page = 1;
-        loadEmployees();
+        showSection("employees");   // jump to Employees from any page and load results
     };
     document.getElementById("search-btn").addEventListener("click", runSearch);
     searchInput.addEventListener("keydown", (ev) => {
@@ -172,9 +254,18 @@ document.addEventListener("DOMContentLoaded", () => {
         loadEmployees();
     });
 
-    // Sidebar navigation
+    // Sidebar navigation (click + keyboard)
     document.querySelectorAll(".sidebar nav li").forEach((li) => {
-        li.addEventListener("click", () => showSection(li.dataset.section));
+        li.addEventListener("click", () => {
+            showSection(li.dataset.section);
+            if (window.matchMedia("(max-width: 700px)").matches) setSidebar(false);
+        });
+        li.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter" || ev.key === " ") {
+                ev.preventDefault();
+                li.click();
+            }
+        });
     });
 
     // Dashboard cards act as shortcuts to their sidebar page
@@ -236,18 +327,14 @@ function fillPositionSelect(deptSelect, posSelect, selectedId) {
     if (selectedId) posSelect.value = selectedId;
 }
 
-const byId = (id) => document.getElementById(id);
-
 function updateAccountRoleFields() {
     const isAdmin = byId("acc-role").value === "admin";
     byId("acc-department-field").hidden = isAdmin;
     byId("acc-position-field").hidden = isAdmin;
 }
+
 // ---------------------------------------------------------------- Add Account
 async function openAccountModal() {
-    fillPositionSelect(byId("acc-department"), byId("acc-position"));
-    updateAccountRoleFields();  
-    
     try {
         await loadFormOptions();
     } catch (err) {
@@ -259,6 +346,7 @@ async function openAccountModal() {
     byId("account-error").hidden = true;
     fillDepartmentSelect(byId("acc-department"));
     fillPositionSelect(byId("acc-department"), byId("acc-position"));
+    updateAccountRoleFields();
 
     byId("acc-birthday").max = new Date().toISOString().slice(0, 10);
     byId("account-modal").hidden = false;
@@ -409,6 +497,7 @@ document.addEventListener("DOMContentLoaded", () => {
             toast("Employee updated.");
             loadDashboard();
             loadEmployees();
+            loadHeaderUser();   // in case the admin edited their own name
         } catch (err) {
             errBox.textContent = err.message;
             errBox.hidden = false;
@@ -421,6 +510,7 @@ function emptyRow(tbody, cols, text) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
     td.colSpan = cols;
+    td.className = "empty-row";
     td.textContent = text;
     tr.appendChild(td);
     tbody.appendChild(tr);
@@ -684,7 +774,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 
-// ---- Leaves
+// ---------------------------------------------------------------- Leaves
 function fmtDate(v) {
     const d = new Date(v);
     return isNaN(d) ? String(v ?? "-") : d.toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" });
@@ -792,6 +882,114 @@ document.addEventListener("DOMContentLoaded", () => {
             toast("Leave filed.");
             loadLeaves();
             loadDashboard();
+        } catch (err) {
+            errBox.textContent = err.message;
+            errBox.hidden = false;
+        }
+    });
+});
+
+
+// ---------------------------------------------------------------- Reports
+let reportData = null;
+
+function fillReportTable(id, rows, cols, formatters = []) {
+    const tbody = document.querySelector("#" + id + " tbody");
+    tbody.innerHTML = "";
+    if (!rows.length) return emptyRow(tbody, cols.length, "No data.");
+    rows.forEach((r) => {
+        const tr = document.createElement("tr");
+        cols.forEach((c, i) => {
+            const td = document.createElement("td");
+            td.textContent = formatters[i] ? formatters[i](r[c]) : r[c];
+            tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+    });
+}
+
+async function loadReports() {
+    try {
+        reportData = await api("/api/admin/reports");
+    } catch (err) {
+        toast(err.message, "error");
+        return;
+    }
+    const d = reportData;
+    setText("rep-total", d.summary.total_employees);
+    setText("rep-active", d.summary.active_employees);
+    setText("rep-payroll", peso(d.summary.total_payroll));
+    fillReportTable("rep-dept-table", d.by_department, ["department", "employees", "payroll"], [null, null, peso]);
+    fillReportTable("rep-status-table", d.by_status, ["status", "total"]);
+    fillReportTable("rep-role-table", d.by_role, ["role", "total"]);
+}
+
+function exportReportCsv() {
+    if (!reportData) return toast("Open Reports first.", "error");
+    const q = (v) => '"' + String(v ?? "").replace(/"/g, '""') + '"';
+    const lines = [["Department", "Employees", "Monthly Payroll"].map(q).join(",")];
+    reportData.by_department.forEach((r) =>
+        lines.push([r.department, r.employees, Number(r.payroll).toFixed(2)].map(q).join(",")));
+    lines.push("", ["Status", "Employees"].map(q).join(","));
+    reportData.by_status.forEach((r) => lines.push([r.status, r.total].map(q).join(",")));
+    lines.push("", ["Role", "Accounts"].map(q).join(","));
+    reportData.by_role.forEach((r) => lines.push([r.role, r.total].map(q).join(",")));
+
+    const blob = new Blob([lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "biri_go_report_" + new Date().toISOString().slice(0, 10) + ".csv";
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
+
+// ---------------------------------------------------------------- Settings
+async function loadSettings() {
+    try {
+        const p = await api("/api/settings/profile");
+        setText("set-name", p.name || "-");
+        setText("set-code", p.employee_code || "-");
+        setText("set-email", p.email || "-");
+        setText("set-role", (p.role || "-").toUpperCase());
+    } catch (err) {
+        toast(err.message, "error");
+    }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    byId("print-report").addEventListener("click", () => window.print());
+    byId("export-report").addEventListener("click", exportReportCsv);
+
+    byId("password-form").addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        const errBox = byId("password-error");
+        errBox.hidden = true;
+
+        const current = byId("pw-current").value;
+        const next = byId("pw-new").value;
+        if (!current) {
+            errBox.textContent = "Enter your current password.";
+            errBox.hidden = false;
+            return;
+        }
+        if (next.length < 8) {
+            errBox.textContent = "New password must be at least 8 characters.";
+            errBox.hidden = false;
+            return;
+        }
+        if (next !== byId("pw-confirm").value) {
+            errBox.textContent = "New passwords do not match.";
+            errBox.hidden = false;
+            return;
+        }
+        try {
+            await api("/api/settings/password", {
+                method: "PUT",
+                body: JSON.stringify({ current_password: current, new_password: next }),
+            });
+            byId("password-form").reset();
+            toast("Password updated.");
         } catch (err) {
             errBox.textContent = err.message;
             errBox.hidden = false;

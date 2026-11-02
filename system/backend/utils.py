@@ -5,7 +5,9 @@ from decimal import Decimal
 from flask import request
 from flask.json.provider import DefaultJSONProvider
 
-from db import fetch_one
+import mysql.connector
+
+from db import fetch_all, fetch_one
 
 # --------------------------------------------------------------------------
 # Constants
@@ -140,3 +142,94 @@ EMP_SELECT = """
 
 def get_employee(employee_id):
     return fetch_one(EMP_SELECT + " WHERE e.employee_id = %s", (employee_id,))
+
+
+# --------------------------------------------------------------------------
+# HR settings (work hours, leave entitlements) - stored in hr_settings
+# --------------------------------------------------------------------------
+SETTING_DEFAULTS = {"work_start": "08:00", "work_end": "17:00", "grace_minutes": 15,
+                    "leave_vacation": 15, "leave_sick": 7, "leave_emergency": 3, "probation_months": 6}
+LEAVE_SETTING_KEY = {"Vacation Leave (PTO)": "leave_vacation", "Sick Leave": "leave_sick",
+                     "Emergency Leave": "leave_emergency"}
+
+
+def get_settings():
+    out = dict(SETTING_DEFAULTS)
+    try:
+        for r in fetch_all("SELECT skey, svalue FROM hr_settings"):
+            key = r["skey"]
+            if key in out:
+                try:
+                    out[key] = r["svalue"] if isinstance(SETTING_DEFAULTS[key], str) else int(r["svalue"])
+                except (TypeError, ValueError):
+                    pass
+    except mysql.connector.Error:
+        pass
+    return out
+
+
+def leave_allowances():
+    """LEAVE_ALLOWANCE, with the three entitlements HR can edit in Settings applied."""
+    settings = get_settings()
+    allowance = dict(LEAVE_ALLOWANCE)
+    for leave_type, key in LEAVE_SETTING_KEY.items():
+        allowance[leave_type] = settings[key]
+    return allowance
+
+
+# --------------------------------------------------------------------------
+# Leave rules shared by the admin, HR and employee routes
+# --------------------------------------------------------------------------
+def ensure_leave_balance(employee_id, leave_type, start, end, exclude_id=None, statuses=("Approved",)):
+    allowance = leave_allowances().get(leave_type)
+    if allowance is None:               # unpaid leave has no limit
+        return
+    marks = ", ".join(["%s"] * len(statuses))
+    sql = ("SELECT COALESCE(SUM(DATEDIFF(end_date, start_date) + 1), 0) AS days FROM leave_requests "
+           "WHERE employee_id = %s AND leave_type = %s AND YEAR(start_date) = %s "
+           "AND leave_status IN (" + marks + ")")
+    params = [employee_id, leave_type, start.year, *statuses]
+    if exclude_id:
+        sql += " AND leave_id <> %s"
+        params.append(exclude_id)
+    used = int(fetch_one(sql, params)["days"])
+    if used + (end - start).days + 1 > allowance:
+        raise ApiError(f"Not enough {leave_type} balance ({max(allowance - used, 0)} day(s) remaining).")
+
+
+def validate_leave_request(employee_id, leave_type, start, end, exclude_id=None, status="Pending"):
+    """Type, sex-restricted types, date order, overlaps and balance."""
+    emp = fetch_one("SELECT sex FROM employees WHERE employee_id = %s", (employee_id,))
+    if not emp:
+        raise ApiError("Selected employee doesn't exist.")
+    if leave_type not in LEAVE_ALLOWANCE:
+        raise ApiError("Select a valid leave type.")
+    needed = LEAVE_SEX_ONLY.get(leave_type)
+    if needed and emp["sex"] != needed:
+        raise ApiError(f"{leave_type} isn't available for this employee.")
+    if end < start:
+        raise ApiError("The end date can't be before the start date.")
+    if status == "Rejected":
+        return
+    sql = ("SELECT 1 AS ok FROM leave_requests WHERE employee_id = %s AND leave_status <> 'Rejected' "
+           "AND start_date <= %s AND end_date >= %s")
+    params = [employee_id, end, start]
+    if exclude_id:
+        sql += " AND leave_id <> %s"
+        params.append(exclude_id)
+    if fetch_one(sql, params):
+        raise ApiError("This employee already has a leave request on those dates.")
+    counted = ("Approved",) if status == "Approved" else ("Approved", "Pending")
+    ensure_leave_balance(employee_id, leave_type, start, end, exclude_id, counted)
+
+
+# --------------------------------------------------------------------------
+# Deleting an employee together with everything that points at them
+# --------------------------------------------------------------------------
+def purge_employee(cur, employee_id):
+    for table in ("attendance", "leave_requests", "payroll", "hr_reviews", "hr_processes"):
+        cur.execute("DELETE FROM %s WHERE employee_id = %%s" % table, (employee_id,))
+    cur.execute("UPDATE departments SET head_employee_id = NULL WHERE head_employee_id = %s", (employee_id,))
+    cur.execute("UPDATE employees SET manager_id = NULL WHERE manager_id = %s", (employee_id,))
+    cur.execute("DELETE FROM account WHERE employee_id = %s", (employee_id,))
+    cur.execute("DELETE FROM employees WHERE employee_id = %s", (employee_id,))

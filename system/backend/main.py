@@ -9,14 +9,15 @@ from flask import request
 import secrets
 import os
 import sys
+import time
 
 import config
 from auth import role_required
 from db import init_db, db, log_activity
-from utils import ApiError, AppJSONProvider
+from utils import ApiError, AppJSONProvider, EMAIL_RE, EMPLOYEE_STATUSES
 from routes.employee import employee_bp
 from routes.admin import admin_bp
-from routes.hr import hr_bp
+from routes.hr import hr_bp, init_hr_tables
 from routes.owner import owner_bp
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -34,11 +35,34 @@ app = Flask(__name__, template_folder=TEMPLATE_DIR,
 
 app.json = AppJSONProvider(app)
 app.secret_key = config.SECRET_KEY
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",                      # browsers won't send it on cross-site POSTs
+    SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE") == "1",   # set when served over HTTPS
+)
 
 app.register_blueprint(employee_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(hr_bp)
 app.register_blueprint(owner_bp)
+
+ROLE_HOME = {"admin": "/admin", "hr": "/hr", "owner": "/owner", "employee": "/employee"}  # match your blueprint URLs
+
+
+@app.after_request
+def no_cache(resp):
+    """Stop the browser Back button from showing a portal page after logout."""
+    if request.path in ROLE_HOME.values():
+        resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.before_request
+def require_json_for_writes():
+    """Cross-site forms can't send application/json, so this plus SameSite=Lax blocks CSRF."""
+    if request.method in ("POST", "PUT", "PATCH", "DELETE") and request.path.startswith("/api/") \
+            and not request.is_json:
+        return jsonify(error="Content-Type must be application/json."), 415
 
 
 @app.errorhandler(ApiError)
@@ -75,6 +99,10 @@ def handle_db_error(e):
 
 @app.route("/")
 def index():
+    # Already signed in? Skip the login page and go to that role's home.
+    role = session.get("role")
+    if session.get("account_id") and role in ROLE_HOME:
+        return redirect(ROLE_HOME[role])
     return render_template("login.html")
 
 
@@ -90,14 +118,26 @@ def hr_page():
     return render_template("hr.html")
 
 
+_FAILED_LOGINS = {}
+MAX_FAILED_LOGINS, LOGIN_WINDOW_SECONDS = 5, 300
 
-ROLE_HOME = {"admin": "/admin", "hr": "/hr", "owner": "/owner", "employee": "/employee"}  # match your blueprint URLs
+
+def _too_many_attempts(key):
+    now = time.time()
+    recent = [t for t in _FAILED_LOGINS.get(key, []) if now - t < LOGIN_WINDOW_SECONDS]
+    _FAILED_LOGINS[key] = recent
+    return len(recent) >= MAX_FAILED_LOGINS
+
 
 @app.route("/api/login", methods=["POST"])
 def api_login():
     data = request.get_json(silent=True) or {}
     code = (data.get("employee_code") or "").strip().lower()
     password = data.get("password") or ""
+
+    throttle_key = f"{request.remote_addr}|{code}"
+    if _too_many_attempts(throttle_key):
+        return jsonify(success=False, message="Too many failed attempts. Try again in a few minutes."), 429
 
     with db() as (conn, cur):
         cur.execute(
@@ -108,16 +148,17 @@ def api_login():
         row = cur.fetchone()
 
     if not row or not check_password_hash(row["account_password"], password):
+        _FAILED_LOGINS.setdefault(throttle_key, []).append(time.time())
         return jsonify(success=False, message="Invalid employee ID or password."), 401
 
+    _FAILED_LOGINS.pop(throttle_key, None)
+    session.clear()
     session["account_id"] = row["account_id"]
     session["role"] = row["role"]
     return jsonify(success=True, redirect=ROLE_HOME.get(row["role"], "/"))
 
 ACCOUNT_ROLES = ("admin", "hr", "owner", "employee")
-EMPLOYEE_STATUSES = ("Active", "On Leave", "Resigned", "Terminated")
 SEX_VALUES = ("Male", "Female")
-EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def _json_object():
@@ -252,12 +293,12 @@ def create_account():
             raise ApiError("An employee with that email already exists.", 409)
         if emp["department_id"] is not None:
             check_position(cur, emp["department_id"], emp["position_id"])
-            
+
         cur.execute(
             "INSERT INTO employees "
             "(first_name, middle_name, last_name, suffix, sex, birthday, "
-            " email, phone, stat, salary, department_id, position_id) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Active', %s, %s, %s)",
+            " email, phone, stat, salary, department_id, position_id, hired) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Active', %s, %s, %s, CURDATE())",
             (emp["first_name"], emp["middle_name"], emp["last_name"], emp["suffix"],
              emp["sex"], emp["birthday"], emp["email"], emp["phone"], emp["salary"],
              emp["department_id"], emp["position_id"]),
@@ -358,6 +399,112 @@ def update_employee_profile(employee_id):
     return jsonify(id=employee_id, message="Employee updated.")
 
 
+# ---------------------------------------------------------------- Reports page
+@app.route("/api/admin/reports")
+@role_required("admin")
+def api_reports():
+    """Numbers for the Reports page."""
+    with db() as (conn, cur):
+        cur.execute(
+            "SELECT d.dept_name AS department, COUNT(e.employee_id) AS employees, "
+            "       COALESCE(SUM(CASE WHEN e.stat = 'Active' THEN e.salary END), 0) AS payroll "
+            "FROM departments d "
+            "LEFT JOIN employees e ON e.department_id = d.department_id "
+            "GROUP BY d.department_id, d.dept_name ORDER BY d.dept_name"
+        )
+        by_department = cur.fetchall()
+
+        cur.execute(
+            "SELECT stat AS status, COUNT(*) AS total "
+            "FROM employees GROUP BY stat ORDER BY total DESC"
+        )
+        by_status = cur.fetchall()
+
+        cur.execute(
+            "SELECT account_role AS role, COUNT(*) AS total "
+            "FROM account GROUP BY account_role ORDER BY total DESC"
+        )
+        by_role = cur.fetchall()
+
+        cur.execute(
+            "SELECT COUNT(*) AS total_employees, "
+            "       COALESCE(SUM(stat = 'Active'), 0) AS active_employees, "
+            "       COALESCE(SUM(CASE WHEN stat = 'Active' THEN salary END), 0) AS total_payroll "
+            "FROM employees"
+        )
+        summary = cur.fetchone()
+
+    return jsonify(
+        summary={
+            "total_employees": int(summary["total_employees"]),
+            "active_employees": int(summary["active_employees"]),
+            "total_payroll": float(summary["total_payroll"]),
+        },
+        by_department=[
+            {"department": r["department"], "employees": int(r["employees"]),
+             "payroll": float(r["payroll"])}
+            for r in by_department
+        ],
+        by_status=[{"status": r["status"], "total": int(r["total"])} for r in by_status],
+        by_role=[{"role": r["role"], "total": int(r["total"])} for r in by_role],
+    )
+
+
+# ---------------------------------------------------------------- Settings page
+@app.route("/api/settings/profile")
+@role_required("admin")
+def settings_profile():
+    """The logged-in admin's own account details."""
+    with db() as (conn, cur):
+        cur.execute(
+            "SELECT a.employee_code, a.account_email AS email, a.account_role AS role, "
+            "       e.first_name, e.last_name "
+            "FROM account a LEFT JOIN employees e ON e.employee_id = a.employee_id "
+            "WHERE a.account_id = %s",
+            (session.get("account_id"),),
+        )
+        row = cur.fetchone()
+    if not row:
+        raise ApiError("Account not found.", 404)
+
+    name = " ".join(p for p in (row.get("first_name"), row.get("last_name")) if p)
+    return jsonify(
+        name=name, employee_code=row["employee_code"],
+        email=row["email"], role=row["role"],
+    )
+
+
+@app.route("/api/settings/password", methods=["PUT"])
+@role_required("admin")
+def settings_password():
+    """Let the logged-in admin change their own password."""
+    data = _json_object()
+    current = data.get("current_password") or ""
+    new = data.get("new_password") or ""
+
+    if len(new) < 8:
+        raise ApiError("New password must be at least 8 characters.")
+
+    with db() as (conn, cur):
+        cur.execute(
+            "SELECT account_password FROM account WHERE account_id = %s",
+            (session.get("account_id"),),
+        )
+        row = cur.fetchone()
+        if not row or not check_password_hash(row["account_password"], current):
+            raise ApiError("Current password is incorrect.", 400)
+        if check_password_hash(row["account_password"], new):
+            raise ApiError("New password must be different from the current one.")
+
+        cur.execute(
+            "UPDATE account SET account_password = %s WHERE account_id = %s",
+            (generate_password_hash(new), session.get("account_id")),
+        )
+        log_activity(cur, "Admin changed their password")
+
+    return jsonify(message="Password updated.")
+
+
 @app.route("/logout")
 def logout():
     session.clear()
@@ -365,15 +512,37 @@ def logout():
 
 
 
+def _ensure_first_admin():
+    """Fresh database: create admin biri-000000 with a one-time password printed to the console."""
+    with db() as (conn, cur):
+        cur.execute("SELECT COUNT(*) AS n FROM account")
+        if cur.fetchone()["n"]:
+            return
+        password = secrets.token_urlsafe(10)
+        cur.execute(
+            "INSERT INTO account (employee_code, account_email, account_password, account_role) "
+            "VALUES ('biri-000000', 'admin@biringan.com', %s, 'admin')",
+            (generate_password_hash(password),),
+        )
+    print("=" * 60)
+    print(" First run: admin account created")
+    print("   Employee ID: biri-000000")
+    print("   Password:    " + password)
+    print(" Sign in and change it right away (Settings > Change Password).")
+    print("=" * 60)
+
+
 def _init_db_safely():
     try:
         init_db()
+        init_hr_tables()
+        _ensure_first_admin()
     except mysql.connector.Error as err:
-        print(f"[warning] Could not reach the database yet: {err}")
+        print(f"[warning] Could not prepare the database yet: {err}")
 
 
 # Runs under `python main.py`, `flask run` and WSGI servers alike.
 _init_db_safely()
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=os.environ.get("FLASK_DEBUG") == "1")
