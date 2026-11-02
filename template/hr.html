@@ -73,6 +73,11 @@
                         <li><a href="#attendance" data-section="attendance"><i class="fas fa-clock"></i>Attendance</a></li>
                         <li><a href="#leaves" data-section="leaves"><i class="fas fa-calendar-check"></i>Leaves<span class="nav-count" id="nc-leaves" hidden></span></a></li>
                     </ul>
+                    <p class="nav-title">Compensation</p>
+                    <ul>
+                        <li><a href="#payroll" data-section="payroll"><i class="fas fa-money-bill-wave"></i>Payroll</a></li>
+                    </ul>
+
                     <p class="nav-title">Company</p>
                     <ul>
                         <li><a href="#announcements" data-section="announcements"><i class="fas fa-bullhorn"></i>Announcements</a></li>
@@ -219,7 +224,49 @@
                         </table>
                     </div>
                 </section>
+                
+                <!-- ============ Payroll ============ -->
+                <section id="page-payroll" class="page" aria-labelledby="h-payroll">
+                    <div class="section-header">
+                        <h2 id="h-payroll">
+                            <i class="fas fa-money-bill-wave"></i> Payroll
+                        </h2>
+                    </div>
 
+                    <div class="filter-bar">
+                        <label>
+                            Select Employee
+                            <select id="payroll-employee">
+                                <option value="">Select Employee</option>
+                            </select>
+                        </label>
+
+                        <label>
+                            Payroll Month
+                            <input type="month" id="payroll-month">
+                        </label>
+
+                        <button type="button" class="btn btn-primary" id="generate-payroll">
+                            <i class="fas fa-calculator"></i> Generate Payroll
+                        </button>
+                    </div>
+
+                    <div class="table-container">
+                        <table id="payroll-table">
+                            <thead>
+                                <tr>
+                                    <th>Employee</th>
+                                    <th>Month</th>
+                                    <th>Gross Pay</th>
+                                    <th>Deductions</th>
+                                    <th>Net Pay</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </section>
                 <!-- ============ Leaves ============ -->
                 <section id="page-leaves" class="page" aria-labelledby="h-leaves">
                     <div class="section-header">

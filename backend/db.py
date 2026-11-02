@@ -18,7 +18,7 @@ def get_pool():
     global _pool
     if _pool is None:
         _pool = pooling.MySQLConnectionPool(
-            pool_name="biri_pool", pool_size=5, pool_reset_session=True, **DB_CONFIG
+            pool_name="biri_pool", pool_size=15, pool_reset_session=True, **DB_CONFIG
         )
     return _pool
 
@@ -88,17 +88,43 @@ def init_db():
         # Leave requests: one table for admin, HR and employees
         cur.execute("ALTER TABLE leave_requests MODIFY leave_type VARCHAR(50) NOT NULL")
         add_column(cur, "leave_requests", "reason", "TEXT NULL")
+        add_column(cur, "leave_requests", "pay_status", "VARCHAR(10) NOT NULL DEFAULT 'Paid'")
         for new, olds in _LEAVE_RENAMES.items():
             marks = ", ".join(["%s"] * len(olds))
             cur.execute("UPDATE leave_requests SET leave_type = %%s WHERE leave_type IN (%s)" % marks, (new, *olds))
         # Attendance: one table for HR and employees
         add_column(cur, "attendance", "status", "VARCHAR(20) NULL")
         add_column(cur, "attendance", "remarks", "VARCHAR(255) NULL")
+        add_column(cur, "attendance", "overtime_hours", "DECIMAL(5,2) NOT NULL DEFAULT 0")
         cur.execute(
             "UPDATE attendance SET status = IF(time_in IS NULL, 'Absent', "
             "IF(time_in > '08:15:00', 'Late', 'Present')) WHERE status IS NULL"
         )
-
+                # Payroll: stores monthly employee salary records
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS payroll (
+                payroll_id INT AUTO_INCREMENT PRIMARY KEY,
+                employee_id INT NOT NULL,
+                pay_period DATE NOT NULL,
+                gross_pay DECIMAL(10,2) NOT NULL DEFAULT 0,
+                deductions DECIMAL(10,2) NOT NULL DEFAULT 0,
+                net_pay DECIMAL(10,2) NOT NULL DEFAULT 0,
+                payment_status VARCHAR(20) NOT NULL DEFAULT 'Pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (employee_id) REFERENCES employees(employee_id),
+                UNIQUE (employee_id, pay_period)
+            )
+            """
+        )
+        add_column(cur, "payroll", "payment_status", "VARCHAR(20) NOT NULL DEFAULT 'Pending'")
+        add_column(cur, "payroll", "created_at", "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP")
+        add_column(cur, "payroll", "monthly_salary", "DECIMAL(10,2) NOT NULL DEFAULT 0")
+        add_column(cur, "payroll", "overtime_pay", "DECIMAL(10,2) NOT NULL DEFAULT 0")
+        add_column(cur, "payroll", "absence_deduction", "DECIMAL(10,2) NOT NULL DEFAULT 0")
+        add_column(cur, "payroll", "unpaid_leave_deduction", "DECIMAL(10,2) NOT NULL DEFAULT 0")
+        add_column(cur, "payroll", "allowances", "DECIMAL(10,2) NOT NULL DEFAULT 0")
+        add_column(cur, "payroll", "manual_deductions", "DECIMAL(10,2) NOT NULL DEFAULT 0")
 
 def log_activity(cur, message):
     cur.execute("INSERT INTO activity_log (message) VALUES (%s)", (message[:255],))
