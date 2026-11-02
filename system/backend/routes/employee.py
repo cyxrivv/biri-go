@@ -3,11 +3,13 @@ from decimal import Decimal
 
 from html import escape
 
+import mysql.connector
 from flask import Blueprint, Response, jsonify, render_template, request, session
 
 from auth import role_required
 from db import db, fetch_all, fetch_one, log_activity
-from utils import ApiError, json_body, LEAVE_ALLOWANCE, LEAVE_SEX_ONLY
+from utils import (ApiError, json_body, LEAVE_ALLOWANCE, LEAVE_SEX_ONLY, get_settings,
+                   leave_allowances, validate_leave_request)
 
 employee_bp = Blueprint("employee", __name__)
 
@@ -128,6 +130,21 @@ def employee_summary():
         (emp_id,),
     )
 
+    settings = get_settings()
+    now = datetime.now()
+    today_row = fetch_one(
+        "SELECT time_in, time_out, status FROM attendance WHERE employee_id = %s AND work_date = %s",
+        (emp_id, now.date()),
+    )
+    try:
+        announcements = fetch_all(
+            "SELECT title, body, posted_on AS date FROM hr_announcements ORDER BY posted_on DESC, id DESC LIMIT 5"
+        )
+    except mysql.connector.Error:
+        announcements = []
+    for a in announcements:
+        a["date"] = _date(a["date"])
+
     for l in leaves:
         l["start_date"] = _date(l["start_date"])
         l["end_date"] = _date(l["end_date"])
@@ -148,9 +165,28 @@ def employee_summary():
         stats=_month_stats(emp_id),
         leave_balances=_leave_balances(emp_id, allowed),
         leave_types=allowed,
-        announcements=[],          # no announcements table yet
+        announcements=announcements,
         daily_target=DAILY_TARGET_HOURS,
+        shift={"start": settings["work_start"], "end": settings["work_end"]},
+        today=_today_payload(today_row),
+        server_now=now.hour * 3600 + now.minute * 60 + now.second,
     )
+
+
+def _hm(value):
+    """TIME (timedelta) -> 'HH:MM' for the browser to calculate with."""
+    if value is None:
+        return None
+    seconds = int(value.total_seconds())
+    return "%02d:%02d" % ((seconds // 3600) % 24, (seconds % 3600) // 60)
+
+
+def _today_payload(row):
+    if not row:
+        return None
+    return {"time_in": _hm(row["time_in"]), "time_out": _hm(row["time_out"]),
+            "time_in_label": _clock(row["time_in"]), "time_out_label": _clock(row["time_out"]),
+            "status": row["status"]}
 
 
 # ---------- dashboard numbers ----------
@@ -187,7 +223,7 @@ def _leave_balances(emp_id, allowed):
     }
     return [
         {"type": t, "total": total, "used": used.get(t, 0), "remaining": max(total - used.get(t, 0), 0)}
-        for t, total in LEAVE_ALLOWANCE.items()
+        for t, total in leave_allowances().items()
         if total is not None and t in allowed
     ]
 
@@ -200,10 +236,15 @@ def check_in():
     emp_id, today = _current_employee_id(), date.today()
     if fetch_one("SELECT 1 AS ok FROM attendance WHERE employee_id = %s AND work_date = %s", (emp_id, today)):
         raise ApiError("You have already checked in today.")
+    now = datetime.now().replace(microsecond=0)
+    settings = get_settings()
+    start = datetime.strptime(settings["work_start"], "%H:%M")
+    limit = (start + timedelta(minutes=settings["grace_minutes"])).time()
+    status = "Late" if now.time() > limit else "Present"
     with db() as (_, cur):
         cur.execute(
-            "INSERT INTO attendance (employee_id, work_date, time_in) VALUES (%s, %s, %s)",
-            (emp_id, today, datetime.now().time().replace(microsecond=0)),
+            "INSERT INTO attendance (employee_id, work_date, time_in, status) VALUES (%s, %s, %s, %s)",
+            (emp_id, today, now.time(), status),
         )
         log_activity(cur, f"Employee #{emp_id} checked in")
     return jsonify(message="Checked in."), 201
@@ -234,21 +275,19 @@ def check_out():
 def request_leave():
     emp_id, data = _current_employee_id(), json_body()
     leave_type = (data.get("type") or "").strip()
-    if leave_type not in _allowed_types(_current_sex(emp_id)):
-        raise ApiError("That leave type isn't available for your profile.")
     try:
         start, end = date.fromisoformat(data.get("start_date")), date.fromisoformat(data.get("end_date"))
     except (TypeError, ValueError):
         raise ApiError("Enter valid start and end dates.")
-    if end < start:
-        raise ApiError("The end date can't be before the start date.")
+    validate_leave_request(emp_id, leave_type, start, end)
+    reason = (data.get("reason") or "").strip()[:1000] or None
     with db() as (_, cur):
         cur.execute(
-            "INSERT INTO leave_requests (employee_id, leave_type, start_date, end_date, leave_status) "
-            "VALUES (%s, %s, %s, %s, 'Pending')",
-            (emp_id, leave_type, start, end),
+            "INSERT INTO leave_requests (employee_id, leave_type, start_date, end_date, reason, leave_status) "
+            "VALUES (%s, %s, %s, %s, %s, 'Pending')",
+            (emp_id, leave_type, start, end, reason),
         )
-        log_activity(cur, f"Employee #{emp_id} requested {leave_type} leave")
+        log_activity(cur, f"Employee #{emp_id} requested {leave_type}")
     return jsonify(message="Leave request sent."), 201
 
 
