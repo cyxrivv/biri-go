@@ -1,10 +1,17 @@
-from flask import Blueprint, jsonify, request, session
+import base64
+import gzip
+import json
+import os
+import re
+from decimal import Decimal
+
+from flask import Blueprint, current_app, jsonify, request, send_from_directory, session
 
 from auth import role_required
 from db import db, fetch_all, fetch_one, log_activity
 from utils import (ApiError, clean, to_int, json_body, LEAVE_ALLOWANCE,
                    purge_employee, validate_leave_request)
-from datetime import date
+from datetime import date, datetime, timedelta
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -349,3 +356,200 @@ def delete_leave(leave_id):
         cur.execute("DELETE FROM leave_requests WHERE leave_id = %s", (leave_id,))
         log_activity(cur, f"Deleted leave request #{leave_id}")
     return jsonify(message="Leave request deleted.")
+# --------------------------------------------------------------------------
+# Backup & restore (pure Python, uses the app's own DB connection:
+# no mysqldump / PATH setup needed). Backups are plain .sql files.
+# --------------------------------------------------------------------------
+BACKUP_HEADER = "-- Biri-Go SQL backup"
+STMT_SEP = "\n-- @@\n"  # a SQL comment, so the file stays valid for the mysql CLI
+BACKUP_NAME_RE = re.compile(r"^biri_go_\d{8}_\d{6}(_prerestore)?\.sql$")
+MAX_BACKUPS = 30  # newest N are kept, older ones are removed automatically
+INSERT_BATCH = 100
+
+
+def backup_dir():
+    path = current_app.config.get("BACKUP_DIR") or os.path.join(current_app.root_path, "backups")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def valid_backup(name):
+    return bool(BACKUP_NAME_RE.match(name)) and os.path.isfile(os.path.join(backup_dir(), name))
+
+
+def _human_size(n):
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024:
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} TB"
+
+
+def _q(name):
+    return "`" + str(name).replace("`", "``") + "`"
+
+
+def _lit(v):
+    """Convert a Python/DB value into a MySQL SQL literal (always a single line)."""
+    if v is None:
+        return "NULL"
+    if isinstance(v, bool):
+        return "1" if v else "0"
+    if isinstance(v, (int, float, Decimal)):
+        return str(v)
+    if isinstance(v, (bytes, bytearray)):
+        return "X'" + bytes(v).hex() + "'"
+    if isinstance(v, datetime):
+        v = v.isoformat(sep=" ")
+    elif isinstance(v, date):
+        v = v.isoformat()
+    elif isinstance(v, timedelta):  # MySQL TIME
+        secs = int(v.total_seconds())
+        sign = "-" if secs < 0 else ""
+        secs = abs(secs)
+        v = f"{sign}{secs // 3600:02d}:{secs % 3600 // 60:02d}:{secs % 60:02d}"
+    s = (str(v).replace("\\", "\\\\").replace("'", "''")
+         .replace("\0", "\\0").replace("\n", "\\n")
+         .replace("\r", "\\r").replace("\x1a", "\\Z"))
+    return "'" + s + "'"
+
+
+def write_dump(f):
+    def emit(stmt):
+        f.write(stmt.rstrip().rstrip(";") + ";" + STMT_SEP)
+
+    f.write(BACKUP_HEADER + "\n")
+    f.write("-- Created: " + datetime.now().isoformat(timespec="seconds") + STMT_SEP)
+    emit("SET NAMES utf8mb4")
+    emit("SET FOREIGN_KEY_CHECKS = 0")
+
+    names = [list(r.values())[0] for r in
+             fetch_all("SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'")]
+    for t in names:
+        create = list(fetch_one("SHOW CREATE TABLE " + _q(t)).values())[1]
+        emit("DROP TABLE IF EXISTS " + _q(t))
+        emit(create)
+        rows = fetch_all("SELECT * FROM " + _q(t))
+        if not rows:
+            continue
+        cols = list(rows[0].keys())
+        head = "INSERT INTO " + _q(t) + " (" + ", ".join(_q(c) for c in cols) + ") VALUES\n"
+        for i in range(0, len(rows), INSERT_BATCH):
+            chunk = rows[i:i + INSERT_BATCH]
+            values = ",\n".join("(" + ", ".join(_lit(r[c]) for c in cols) + ")" for r in chunk)
+            emit(head + values)
+
+    emit("SET FOREIGN_KEY_CHECKS = 1")
+
+
+def create_backup(tag=""):
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    name = f"biri_go_{stamp}{('_' + tag) if tag else ''}.sql"
+    target = os.path.join(backup_dir(), name)
+    try:
+        with open(target, "w", encoding="utf-8", newline="\n") as f:
+            write_dump(f)
+    except Exception:
+        if os.path.exists(target):
+            os.remove(target)  # never leave a broken file behind
+        raise
+    for old in list_backup_files()[MAX_BACKUPS:]:
+        os.remove(os.path.join(backup_dir(), old["name"]))
+    return name
+
+
+def list_backup_files():
+    items = []
+    for name in os.listdir(backup_dir()):
+        if BACKUP_NAME_RE.match(name):
+            st = os.stat(os.path.join(backup_dir(), name))
+            items.append({
+                "name": name,
+                "type": "Pre-restore" if "_prerestore" in name else "Manual",
+                "created": datetime.fromtimestamp(st.st_mtime).strftime("%b %d, %Y %I:%M %p"),
+                "size": _human_size(st.st_size),
+                "_mtime": st.st_mtime,
+            })
+    items.sort(key=lambda x: x["_mtime"], reverse=True)
+    for i in items:
+        del i["_mtime"]
+    return items
+
+
+def restore_dump(path):
+    with open(path, "r", encoding="utf-8", newline="") as f:
+        text = f.read().replace("\r\n", "\n")
+    if not text.startswith(BACKUP_HEADER):
+        raise ApiError("This file is not a valid Biri-Go backup.")
+
+    statements = []
+    for chunk in text.split(STMT_SEP):
+        chunk = chunk.strip()
+        if not chunk or all(line.startswith("--") for line in chunk.splitlines()):
+            continue  # header / comment-only chunk
+        statements.append(chunk.rstrip(";"))
+
+    with db() as (_, cur):
+        cur.execute("SET FOREIGN_KEY_CHECKS = 0")
+        try:
+            for stmt in statements:
+                cur.execute(stmt)
+        finally:
+            cur.execute("SET FOREIGN_KEY_CHECKS = 1")
+
+@admin_bp.get("/api/backups")
+@role_required("admin")
+def list_backups():
+    return jsonify(list_backup_files())
+
+
+@admin_bp.post("/api/backups")
+@role_required("admin")
+def create_backup_route():
+    try:
+        name = create_backup()
+    except Exception as exc:
+        current_app.logger.exception("Backup failed")
+        raise ApiError(f"Backup failed: {exc}", 500)
+    with db() as (_, cur):
+        log_activity(cur, f"Created backup {name}")
+    return jsonify(name=name, message="Backup created."), 201
+
+
+@admin_bp.get("/api/backups/<name>/download")
+@role_required("admin")
+def download_backup(name):
+    if not valid_backup(name):
+        raise ApiError("Backup not found.", 404)
+    return send_from_directory(backup_dir(), name, as_attachment=True)
+
+
+@admin_bp.delete("/api/backups/<name>")
+@role_required("admin")
+def delete_backup(name):
+    if not valid_backup(name):
+        raise ApiError("Backup not found.", 404)
+    os.remove(os.path.join(backup_dir(), name))
+    with db() as (_, cur):
+        log_activity(cur, f"Deleted backup {name}")
+    return jsonify(message="Backup deleted.")
+
+
+@admin_bp.post("/api/backups/<name>/restore")
+@role_required("admin")
+def restore_backup(name):
+    if not valid_backup(name):
+        raise ApiError("Backup not found.", 404)
+    if clean(json_body().get("confirm")) != "RESTORE":
+        raise ApiError("Type RESTORE to confirm.")
+    safety = create_backup(tag="prerestore")  # safety net before overwriting anything
+    try:
+        restore_dump(os.path.join(backup_dir(), name))
+    except ApiError:
+        raise
+    except Exception as exc:
+        current_app.logger.exception("Restore failed")
+        raise ApiError(f"Restore failed: {exc}. Your data before the restore is saved in {safety}.", 500)
+    with db() as (_, cur):
+        log_activity(cur, f"Restored database from {name}")
+    return jsonify(message="Database restored.", safety_backup=safety)

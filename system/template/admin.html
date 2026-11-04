@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <meta name="theme-color" content="#b7e4c7">
     <meta name="robots" content="noindex, nofollow">
     <title>Admin | Biri-Go</title>
@@ -44,7 +45,7 @@
                     </button>
                     <div class="menu" id="user-menu" hidden>
                         <button type="button" data-section="setting"><i class="far fa-id-card" aria-hidden="true"></i> My account</button>
-                        <a href="/logout"><i class="fas fa-right-from-bracket" aria-hidden="true"></i> Sign out</a>
+                        <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit"><i class="fas fa-right-from-bracket" aria-hidden="true"></i> Sign out</button></form>
                     </div>
                 </div>
             </div>
@@ -62,6 +63,7 @@
                         <li data-section="salaries" tabindex="0" role="button"><i class="fas fa-money-bill-wave" aria-hidden="true"></i>Salaries</li>
                         <li data-section="leaves" tabindex="0" role="button"><i class="fas fa-calendar-check" aria-hidden="true"></i>Leaves</li>
                         <li data-section="reports" tabindex="0" role="button"><i class="fas fa-chart-line" aria-hidden="true"></i>Reports</li>
+                        <li data-section="backup" tabindex="0" role="button"><i class="fas fa-database" aria-hidden="true"></i>Backup</li>
                         <li data-section="setting" tabindex="0" role="button"><i class="fas fa-gear" aria-hidden="true"></i>Settings</li>
                     </ul>
                 </nav>
@@ -72,7 +74,7 @@
                         <p>Check Reports and Settings, or contact the system owner.</p>
                         <button class="text-btn" type="button" data-action="help">Get help →</button>
                     </div>
-                    <a href="/logout" class="logout-btn"><i class="fas fa-right-from-bracket" aria-hidden="true"></i>Sign out</a>
+                    <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="logout-btn"><i class="fas fa-right-from-bracket" aria-hidden="true"></i>Sign out</button></form>
                     <small>Biri_Go · Administration</small>
                 </div>
             </aside>
@@ -138,7 +140,7 @@
                                         <th>Employee ID</th>
                                         <th>Name</th>
                                         <th>Department</th>
-                                        <th>Positions</th>
+                                        <th>Position</th>
                                         <th>Email</th>
                                         <th>Phone</th>
                                         <th>Status</th>
@@ -323,6 +325,29 @@
                     </section>
                 </div>
 
+                <!-- Backup page -->
+                <div id="page-backup" class="page">
+                    <section class="section">
+                        <div class="section-header">
+                            <h2><i class="fas fa-database"></i> Backup</h2>
+                            <div class="section-actions">
+                                <button type="button" id="create-backup-btn" class="btn btn-primary">
+                                    <i class="fas fa-plus"></i> Create backup
+                                </button>
+                            </div>
+                        </div>
+                        <div class="table-container">
+                            <table id="backups-table">
+                                <thead>
+                                    <tr><th>File</th><th>Type</th><th>Created</th><th>Size</th><th>Actions</th></tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                        <p class="muted">The newest 30 backups are kept automatically. Restoring replaces all current data; a pre-restore backup is saved first.</p>
+                    </section>
+                </div>
+
                 <!-- Settings page -->
                 <div id="page-setting" class="page">
                     <section class="section">
@@ -386,7 +411,13 @@
                         <input type="text" id="acc-last" required maxlength="50">
                     </label>
                     <label>Suffix
-                        <input type="text" id="acc-suffix" required maxlength="20" placeholder="Enter None if none">
+                        <select id="acc-suffix" required>
+                            <option value="None" selected>None</option>
+                            <option value="Jr.">Jr.</option>
+                            <option value="Sr.">Sr.</option>
+                            <option value="Others">Others</option>
+                        </select>
+                        <input type="text" id="acc-suffix-other" maxlength="20" placeholder="Specify suffix" style="display:none">
                     </label>
                     <label>Sex
                         <select id="acc-sex" required>
@@ -402,7 +433,7 @@
                         <input type="email" id="acc-email" required maxlength="100" autocomplete="off">
                     </label>
                     <label>Phone
-                        <input type="text" id="acc-phone" maxlength="20">
+                        <input type="text" id="acc-phone" inputmode="numeric" maxlength="11" placeholder="09XXXXXXXXX">
                     </label>
                     <label>Role
                         <select id="acc-role" required>
@@ -457,7 +488,13 @@
                         <input type="text" id="emp-last" required maxlength="50">
                     </label>
                     <label>Suffix
-                        <input type="text" id="emp-suffix" required maxlength="20" placeholder="Enter None if none">
+                        <select id="emp-suffix" required>
+                            <option value="None" selected>None</option>
+                            <option value="Jr.">Jr.</option>
+                            <option value="Sr.">Sr.</option>
+                            <option value="Others">Others</option>
+                        </select>
+                        <input type="text" id="emp-suffix-other" maxlength="20" placeholder="Specify suffix" style="display:none">
                     </label>
                     <label>Sex
                         <select id="emp-sex" required>
@@ -473,7 +510,7 @@
                         <input type="email" id="emp-email" required maxlength="100" autocomplete="off">
                     </label>
                     <label>Phone
-                        <input type="text" id="emp-phone" maxlength="20">
+                        <input type="text" id="emp-phone" inputmode="numeric" maxlength="11" placeholder="09XXXXXXXXX">
                     </label>
                     <label>Department
                         <select id="emp-department" required></select>

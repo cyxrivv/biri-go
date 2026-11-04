@@ -30,7 +30,15 @@
 
   /* ---------- network ---------- */
   async function api(url, options = {}) {
-    const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', ...options });
+    const res = await fetch(url, {
+      ...options,
+      credentials: 'same-origin',
+      headers: {
+        ...(options.headers || {}),
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || '',
+      },
+    });
     if (res.status === 401) { window.location.href = '/'; return new Promise(() => {}); }
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
@@ -63,7 +71,9 @@
     $('profile-name').textContent = full || '-';
     $('card-position').textContent = me.position || '-';
     $('card-department').textContent = me.department || '-';
-    $('card-status').outerHTML = badge(me.status || '-').replace('<span', '<span id="card-status"');
+    const statusBadge = $('card-status');
+    statusBadge.textContent = me.status || '-';
+    statusBadge.className = `badge ${BADGE[me.status] || 'b-grey'}`;
     $('greeting').textContent = `Welcome back, ${me.first_name || 'there'}`;
     $('att-place-text').textContent = me.department || '-';
     const rows = [
