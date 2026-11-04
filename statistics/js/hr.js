@@ -296,11 +296,11 @@ const deptOpts = () => S.departments.map(d => ({ v: d.id, l: d.name }));
 
 const onLeaveOn = date => S.leaves.filter(l => l.status === "Approved" && l.from <= date && l.to >= date);
 
-const empty = (msg, cols) => cols ? `<tr><td colspan="${cols}" class="muted" style="text-align:center;padding:1.2rem">${msg}</td></tr>` : `<li class="muted">${msg}</li>`;
+const empty = (msg, cols) => cols ? `<tr><td colspan="${Number(cols) || 1}" class="muted" style="text-align:center;padding:1.2rem">${esc(msg)}</td></tr>` : `<li class="muted">${esc(msg)}</li>`;
 
 const btn = (act, id, icon, label, cls = "btn-secondary") =>
 
-    `<button type="button" class="btn ${cls} btn-sm" data-act="${act}" data-id="${id}" title="${label}" aria-label="${label}"><i class="fas fa-${icon}"></i></button>`;
+    `<button type="button" class="btn ${esc(cls)} btn-sm" data-act="${esc(act)}" data-id="${esc(id)}" title="${esc(label)}" aria-label="${esc(label)}"><i class="fas fa-${esc(icon)}"></i></button>`;
 
 
 
@@ -594,7 +594,7 @@ function fillSelect(sel, options, blank, keep = true) {
 
     const old = sel.value;
 
-    sel.innerHTML = (blank ? `<option value="">${blank}</option>` : "") + options.map(o => {
+    sel.innerHTML = (blank ? `<option value="">${esc(blank)}</option>` : "") + options.map(o => {
 
         o = typeof o === "object" ? o : { v: o, l: o };
 
