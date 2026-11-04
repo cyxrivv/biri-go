@@ -62,9 +62,18 @@ def inject_csrf_token():
 
 @app.after_request
 def no_cache(resp):
-    """Stop the browser Back button from showing a portal page after logout."""
+    """Apply cache and browser security headers to every response."""
     if request.path in ROLE_HOME.values():
         resp.headers["Cache-Control"] = "no-store"
+
+    # Defense in depth for browser-side injection and content sniffing.
+    # We avoid a restrictive script-src here because the current templates
+    # may contain inline scripts; XSS prevention still relies on safe output.
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    resp.headers["Content-Security-Policy"] = (
+        "object-src 'none'; base-uri 'self'; frame-ancestors 'self'"
+    )
     return resp
 
 
@@ -154,12 +163,21 @@ def _too_many_attempts(key):
 @app.route("/api/login", methods=["POST"])
 def api_login():
     data = request.get_json(silent=True) or {}
-    code = (data.get("employee_code") or "").strip().lower()
-    password = data.get("password") or ""
+    raw_code = data.get("employee_code")
+    code = raw_code.strip().lower() if isinstance(raw_code, str) else ""
+    raw_password = data.get("password")
+    password = raw_password if isinstance(raw_password, str) else ""
 
-    throttle_key = f"{request.remote_addr}|{code}"
+    # Keep throttle keys bounded even if someone submits an unusually long ID.
+    throttle_key = f"{request.remote_addr}|{code[:64]}"
     if _too_many_attempts(throttle_key):
         return jsonify(success=False, message="Too many failed attempts. Try again in a few minutes."), 429
+
+    # Employee IDs are generated as biri- followed by exactly six digits.
+    # Reject malformed input before it reaches the database query.
+    if not re.fullmatch(r"biri-\\d{6}", code) or len(password) > 1024:
+        _FAILED_LOGINS.setdefault(throttle_key, []).append(time.time())
+        return jsonify(success=False, message="Invalid employee ID or password."), 401
 
     with db() as (conn, cur):
         cur.execute(
