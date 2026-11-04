@@ -71,7 +71,9 @@
     $('profile-name').textContent = full || '-';
     $('card-position').textContent = me.position || '-';
     $('card-department').textContent = me.department || '-';
-    $('card-status').outerHTML = badge(me.status || '-').replace('<span', '<span id="card-status"');
+    const statusBadge = $('card-status');
+    statusBadge.textContent = me.status || '-';
+    statusBadge.className = `badge ${BADGE[me.status] || 'b-grey'}`;
     $('greeting').textContent = `Welcome back, ${me.first_name || 'there'}`;
     $('att-place-text').textContent = me.department || '-';
     const rows = [
