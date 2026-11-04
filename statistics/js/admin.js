@@ -137,6 +137,7 @@ function showSection(section) {
     if (section === "salaries") loadSalaries();
     if (section === "leaves") loadLeaves();
     if (section === "reports") loadReports();
+    if (section === "backup") loadBackups();
     if (section === "setting") loadSettings();
 
     document.querySelector(".main-content").scrollTop = 0;
@@ -337,6 +338,74 @@ function updateAccountRoleFields() {
     byId("acc-position-field").hidden = isAdmin;
 }
 
+// ---------------------------------------------------------------- Input rules (names, suffix, phone)
+const PHONE_LENGTH = 11;                       // PH mobile number: 09XXXXXXXXX
+const SUFFIX_PRESETS = ["None", "Jr.", "Sr."];
+const NAME_OK = /^\p{L}[\p{L} .'\-]*$/u;       // letters, spaces, . ' -
+
+// prefix is "acc" (Add Account form) or "emp" (Edit Employee form)
+function wirePersonFields(prefix) {
+    ["first", "middle", "last"].forEach((part) => {
+        const el = byId(prefix + "-" + part);
+        el.addEventListener("input", () => {
+            el.value = el.value.replace(/[^\p{L} .'\-]/gu, "");
+        });
+    });
+
+    const other = byId(prefix + "-suffix-other");
+    other.addEventListener("input", () => {
+        other.value = other.value.replace(/[^\p{L}\p{N}. ]/gu, "");
+    });
+    byId(prefix + "-suffix").addEventListener("change", () => syncSuffix(prefix));
+
+    const phone = byId(prefix + "-phone");
+    phone.addEventListener("input", () => {
+        phone.value = phone.value.replace(/\D/g, "").slice(0, PHONE_LENGTH);
+    });
+}
+
+// Show the "specify" box only when "Others" is selected
+function syncSuffix(prefix) {
+    const isOther = byId(prefix + "-suffix").value === "Others";
+    const box = byId(prefix + "-suffix-other");
+    box.style.display = isOther ? "" : "none";
+    if (!isOther) box.value = "";
+}
+
+// Fill the suffix controls from a saved value (e.g. "Jr.", "III", "None")
+function setSuffix(prefix, value) {
+    const text = String(value || "None").trim() || "None";
+    const norm = (s) => s.toLowerCase().replace(/\./g, "");
+    const preset = SUFFIX_PRESETS.find((p) => norm(p) === norm(text));
+    byId(prefix + "-suffix").value = preset || "Others";
+    syncSuffix(prefix);
+    if (!preset) byId(prefix + "-suffix-other").value = text;
+}
+
+function getSuffix(prefix) {
+    const choice = byId(prefix + "-suffix").value;
+    return choice === "Others" ? byId(prefix + "-suffix-other").value.trim() : choice;
+}
+
+// Returns an error message, or null when the person fields are fine
+function checkPersonFields(prefix) {
+    const first = byId(prefix + "-first").value.trim();
+    const middle = byId(prefix + "-middle").value.trim();
+    const last = byId(prefix + "-last").value.trim();
+    const phone = byId(prefix + "-phone").value.trim();
+
+    if (!first) return "First name is required.";
+    if (!NAME_OK.test(first)) return "First name can only contain letters.";
+    if (middle && !NAME_OK.test(middle)) return "Middle name can only contain letters.";
+    if (!last) return "Last name is required.";
+    if (!NAME_OK.test(last)) return "Last name can only contain letters.";
+    if (byId(prefix + "-suffix").value === "Others" && !getSuffix(prefix)) {
+        return "Please specify the suffix.";
+    }
+    if (phone && !/^[0-9]{11}$/.test(phone)) return "Phone number must be exactly 11 digits.";
+    return null;
+}
+
 // ---------------------------------------------------------------- Add Account
 async function openAccountModal() {
     try {
@@ -347,6 +416,7 @@ async function openAccountModal() {
     }
 
     byId("account-form").reset();
+    syncSuffix("acc");
     byId("account-error").hidden = true;
     fillDepartmentSelect(byId("acc-department"));
     fillPositionSelect(byId("acc-department"), byId("acc-position"));
@@ -377,7 +447,7 @@ async function editEmployee(id) {
     byId("emp-first").value = emp.first_name || "";
     byId("emp-middle").value = emp.middle_name || "";
     byId("emp-last").value = emp.last_name || "";
-    byId("emp-suffix").value = emp.suffix || "None";
+    setSuffix("emp", emp.suffix);
     byId("emp-sex").value = emp.sex || "";
     byId("emp-birthday").value = emp.birthday || "";
     byId("emp-birthday").max = new Date().toISOString().slice(0, 10);
@@ -400,6 +470,8 @@ function closeEmployeeModal() {
 
 // ---------------------------------------------------------------- Wiring
 document.addEventListener("DOMContentLoaded", () => {
+    ["acc", "emp"].forEach(wirePersonFields);
+
     // Add Account
     byId("add-account-btn").addEventListener("click", openAccountModal);
     byId("acc-department").addEventListener("change", () =>
@@ -433,6 +505,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const errBox = byId("account-error");
         const val = (id) => byId(id).value;
 
+        const problem = checkPersonFields("acc");
+        if (problem) {
+            errBox.textContent = problem;
+            errBox.hidden = false;
+            return;
+        }
+
         if (val("acc-password") !== val("acc-confirm")) {
             errBox.textContent = "Passwords do not match.";
             errBox.hidden = false;
@@ -444,7 +523,7 @@ document.addEventListener("DOMContentLoaded", () => {
             first_name: val("acc-first"),
             middle_name: val("acc-middle"),
             last_name: val("acc-last"),
-            suffix: val("acc-suffix"),
+            suffix: getSuffix("acc"),
             sex: val("acc-sex"),
             birthday: val("acc-birthday"),
             email: val("acc-email"),
@@ -477,11 +556,18 @@ document.addEventListener("DOMContentLoaded", () => {
         const errBox = byId("employee-error");
         const val = (id) => byId(id).value;
 
+        const problem = checkPersonFields("emp");
+        if (problem) {
+            errBox.textContent = problem;
+            errBox.hidden = false;
+            return;
+        }
+
         const payload = {
             first_name: val("emp-first"),
             middle_name: val("emp-middle"),
             last_name: val("emp-last"),
-            suffix: val("emp-suffix"),
+            suffix: getSuffix("emp"),
             sex: val("emp-sex"),
             birthday: val("emp-birthday"),
             email: val("emp-email"),
@@ -999,4 +1085,99 @@ document.addEventListener("DOMContentLoaded", () => {
             errBox.hidden = false;
         }
     });
+});
+
+
+// ---------------------------------------------------------------- Backup
+async function loadBackups() {
+    const tbody = document.querySelector("#backups-table tbody");
+    try {
+        const items = await api("/api/backups");
+        tbody.innerHTML = "";
+        if (!items.length) return emptyRow(tbody, 5, "No backups yet. Click Create backup.");
+
+        items.forEach((b) => {
+            const tr = document.createElement("tr");
+            [b.name, b.type, b.created, b.size].forEach((v) => {
+                const td = document.createElement("td");
+                td.textContent = v;
+                tr.appendChild(td);
+            });
+
+            const actions = document.createElement("td");
+            actions.className = "actions";
+
+            const dl = document.createElement("button");
+            dl.className = "btn btn-secondary";
+            dl.textContent = "Download";
+            dl.addEventListener("click", () => {
+                window.location.href = "/api/backups/" + encodeURIComponent(b.name) + "/download";
+            });
+            actions.appendChild(dl);
+
+            const rs = document.createElement("button");
+            rs.className = "btn btn-secondary";
+            rs.textContent = "Restore";
+            rs.addEventListener("click", () => restoreBackup(b.name));
+            actions.appendChild(rs);
+
+            const del = document.createElement("button");
+            del.className = "btn btn-danger";
+            del.textContent = "Delete";
+            del.addEventListener("click", () => deleteBackup(b.name));
+            actions.appendChild(del);
+
+            tr.appendChild(actions);
+            tbody.appendChild(tr);
+        });
+    } catch (err) {
+        toast(err.message, "error");
+    }
+}
+
+async function createBackup() {
+    const btn = byId("create-backup-btn");
+    btn.disabled = true;
+    try {
+        const d = await api("/api/backups", { method: "POST" });
+        toast("Backup created: " + d.name);
+        await loadBackups();
+    } catch (err) {
+        toast(err.message, "error");
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function deleteBackup(name) {
+    if (!confirm("Delete " + name + " permanently?")) return;
+    try {
+        await api("/api/backups/" + encodeURIComponent(name), { method: "DELETE" });
+        toast("Backup deleted.");
+        await loadBackups();
+    } catch (err) {
+        toast(err.message, "error");
+    }
+}
+
+async function restoreBackup(name) {
+    const answer = prompt(
+        "This will REPLACE all current data with:\n" + name +
+        "\n\nA pre-restore backup is saved first.\nType RESTORE to continue:"
+    );
+    if (answer === null) return;
+    try {
+        await api("/api/backups/" + encodeURIComponent(name) + "/restore", {
+            method: "POST",
+            body: JSON.stringify({ confirm: answer }),
+        });
+        toast("Database restored.");
+        await Promise.all([loadBackups(), loadDashboard()]);
+    } catch (err) {
+        toast(err.message, "error");
+    }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    byId("create-backup-btn").addEventListener("click", createBackup);
 });

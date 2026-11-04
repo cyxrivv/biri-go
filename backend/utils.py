@@ -122,6 +122,38 @@ def json_body():
 
 
 # --------------------------------------------------------------------------
+# Person field rules (names, suffix, phone) - call from the account routes
+# --------------------------------------------------------------------------
+PHONE_RE = re.compile(r"^[0-9]{11}$")           # PH mobile number: 09XXXXXXXXX
+
+
+def _is_name(value):
+    return value[0].isalpha() and all(ch.isalpha() or ch in " .'-" for ch in value)
+
+
+def validate_person_fields(data):
+    """First/middle/last name: letters only. Suffix: short plain label. Phone: exactly 11 digits."""
+    for field, label, required in (("first_name", "First name", True),
+                                   ("middle_name", "Middle name", False),
+                                   ("last_name", "Last name", True)):
+        value = clean(data.get(field))
+        if not value:
+            if required:
+                raise ApiError(f"{label} is required.")
+            continue
+        if not _is_name(value):
+            raise ApiError(f"{label} can only contain letters.")
+
+    suffix = clean(data.get("suffix"))
+    if suffix and (len(suffix) > 20 or not all(ch.isalnum() or ch in ". " for ch in suffix)):
+        raise ApiError("Suffix can only contain letters, numbers and periods.")
+
+    phone = clean(data.get("phone"))
+    if phone and not PHONE_RE.match(str(phone)):
+        raise ApiError("Phone number must be exactly 11 digits.")
+
+
+# --------------------------------------------------------------------------
 # Employee lookup (shared by HR, owner and employee routes)
 # --------------------------------------------------------------------------
 EMP_SELECT = """
