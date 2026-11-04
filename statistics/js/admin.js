@@ -5,8 +5,12 @@ const state = { page: 1, perPage: 10, search: "", status: "" };
 
 async function api(url, options = {}) {
     const res = await fetch(url, {
-        headers: { "Content-Type": "application/json" },
         ...options,
+        headers: {
+            ...(options.headers || {}),
+            "Content-Type": "application/json",
+            "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]')?.content || "",
+        },
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || "Request failed (" + res.status + ")");
