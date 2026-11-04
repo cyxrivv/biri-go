@@ -39,13 +39,13 @@ const badge = s => `<span class="badge badge-${slug(s)}">${esc(s)}</span>`;
 async function api(url, options = {}) {
 
     const res = await fetch(url, {
-
-        headers: { "Content-Type": "application/json" },
-
-        credentials: "same-origin",
-        
         ...options,
-
+        credentials: "same-origin",
+        headers: {
+            ...(options.headers || {}),
+            "Content-Type": "application/json",
+            "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]')?.content || "",
+        },
     });
 
     if (res.status === 401) {
