@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <meta name="theme-color" content="#b9e3cb">
     <meta name="robots" content="noindex, nofollow">
 
@@ -36,7 +37,7 @@
             </button>
             <div class="menu" id="user-menu" hidden>
                 <button type="button" data-page="profile"><i class="far fa-id-card" aria-hidden="true"></i> My profile</button>
-                <a href="/logout"><i class="fas fa-right-from-bracket" aria-hidden="true"></i> Sign out</a>
+                <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit"><i class="fas fa-right-from-bracket" aria-hidden="true"></i> Sign out</button></form>
             </div>
         </div>
     </div>
@@ -64,7 +65,7 @@
                 <p>Your HR team is here to help.</p>
                 <button class="text-btn" type="button" data-action="help">Contact HR →</button>
             </div>
-            <a href="/logout" class="logout-btn"><i class="fas fa-right-from-bracket" aria-hidden="true"></i> Sign out</a>
+            <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="logout-btn"><i class="fas fa-right-from-bracket" aria-hidden="true"></i> Sign out</button></form>
             <small>Biri_Go · Employee self-service</small>
         </div>
     </aside>

@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <meta name="theme-color" content="#b7e4c7">
     <meta name="robots" content="noindex, nofollow">
     <title>Dashboard | HR | Biri-Go</title>
@@ -43,7 +44,7 @@
                     </button>
                     <div class="menu" id="user-menu" hidden>
                         <a href="#settings" class="menu-item"><i class="fas fa-gear" aria-hidden="true"></i> HR settings</a>
-                        <a href="/logout" class="menu-item menu-danger"><i class="fas fa-right-from-bracket" aria-hidden="true"></i> Sign out</a>
+                        <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="menu-item menu-danger"><i class="fas fa-right-from-bracket" aria-hidden="true"></i> Sign out</button></form>
                     </div>
                 </div>
             </div>
@@ -224,6 +225,7 @@
                         </table>
                     </div>
                 </section>
+
                 <!-- ============ Payroll ============ -->
                 <section id="page-payroll" class="page" aria-labelledby="h-payroll">
                     <div class="section-header">
