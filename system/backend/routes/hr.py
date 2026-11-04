@@ -323,12 +323,10 @@ def _parse_employee(data):
     emp_type, status = _s(data, "type", 20) or "Full-time", _s(data, "status", 20) or "Active"
     try:
         salary = float(data.get("salary") or 0)
-
     except (TypeError, ValueError):
         raise ApiError("Please enter a valid salary.")
     if salary < 0:
        raise ApiError("Salary cannot be negative.")
-
     if not first:
         raise ApiError("First name is required.")
     if not last:

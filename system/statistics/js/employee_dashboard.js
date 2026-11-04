@@ -19,26 +19,23 @@
   const hhmm = (secs) => `${pad(Math.floor(secs / 3600))}:${pad(Math.floor((secs % 3600) / 60))}`;
   const toSecs = (t) => (t ? +t.slice(0, 2) * 3600 + +t.slice(3, 5) * 60 : null);
   const localToday = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+
+  // Status -> badge class (these match the b-* / badge-* classes in the stylesheet)
   const BADGE = { Approved: 'b-green', Pending: 'b-orange', Rejected: 'b-red', Active: 'b-green', 'On Leave': 'b-orange', Resigned: 'b-grey', Terminated: 'b-red' };
-  const badge = (s) => `<span class="badge ${BADGE[s] || 'b-grey'}">${esc(s)}</span>`;
+  const badgeClass = (s) => BADGE[s] || 'b-grey';
+  const badge = (s) => `<span class="badge ${badgeClass(s)}">${esc(s)}</span>`;
   const emptyRow = (cols, msg) => `<tr><td colspan="${cols}" class="empty-row">${esc(msg)}</td></tr>`;
+  const swatch = (i) => (i % 3 === 1 ? 'c1' : i % 3 === 2 ? 'c2' : '');
 
   let me = null;
   let data = null;
   let loadedAt = 0;
-  const mobile = () => window.matchMedia('(max-width: 900px)').matches;
+  const mobileQuery = window.matchMedia('(max-width: 900px)');
+  const mobile = () => mobileQuery.matches;
 
   /* ---------- network ---------- */
   async function api(url, options = {}) {
-    const res = await fetch(url, {
-      ...options,
-      credentials: 'same-origin',
-      headers: {
-        ...(options.headers || {}),
-        'Content-Type': 'application/json',
-        'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || '',
-      },
-    });
+    const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', ...options });
     if (res.status === 401) { window.location.href = '/'; return new Promise(() => {}); }
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
@@ -49,7 +46,7 @@
   function toast(message, isError) {
     const el = $('toast');
     el.textContent = message;
-    el.className = isError ? 'toast error' : 'toast';
+    el.className = isError ? 'toast toast-error' : 'toast toast-success';
     el.hidden = false;
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { el.hidden = true; }, 3500);
@@ -71,9 +68,11 @@
     $('profile-name').textContent = full || '-';
     $('card-position').textContent = me.position || '-';
     $('card-department').textContent = me.department || '-';
-    const statusBadge = $('card-status');
-    statusBadge.textContent = me.status || '-';
-    statusBadge.className = `badge ${BADGE[me.status] || 'b-grey'}`;
+
+    const status = $('card-status');
+    status.textContent = me.status || '-';
+    status.className = `badge ${badgeClass(me.status)}`;
+
     $('greeting').textContent = `Welcome back, ${me.first_name || 'there'}`;
     $('att-place-text').textContent = me.department || '-';
     const rows = [
@@ -123,7 +122,7 @@
     $('balance-list').innerHTML = data.leave_balances.length ? data.leave_balances.map((b, i) => {
       const pct = b.total ? Math.min(100, (b.used / b.total) * 100) : 0;
       return `<div class="bal"><div class="bal-top"><span>${esc(b.type)}</span><span><strong>${b.remaining}</strong> of ${b.total} days left</span></div>
-        <div class="bar ${i % 3 === 1 ? 'c1' : i % 3 === 2 ? 'c2' : ''}"><span style="width:${pct}%"></span></div></div>`;
+        <div class="bar ${swatch(i)}"><span style="width:${pct}%"></span></div></div>`;
     }).join('') : '<p class="muted small">No leave balances.</p>';
     $('balance-note').textContent = `Balances count approved leave for ${new Date().getFullYear()}.`;
   }
@@ -157,8 +156,8 @@
 
   function renderNews() {
     $('news-list').innerHTML = data.announcements.length ? data.announcements.map((a, i) =>
-      `<li><span class="swatch ${i % 3 === 1 ? 'c1' : i % 3 === 2 ? 'c2' : ''}"></span><div><strong>${esc(a.title)}</strong><p>${esc(a.body)}</p><small class="muted">${fmtDate(a.date)}</small></div></li>`).join('')
-      : '<li class="muted small">No announcements.</li>';
+      `<li><span class="swatch ${swatch(i)}" aria-hidden="true"></span><div><strong>${esc(a.title)}</strong><p>${esc(a.body)}</p><small>${fmtDate(a.date)}</small></div></li>`).join('')
+      : '<li class="empty muted small">No announcements.</li>';
     const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
     $('bell-dot').hidden = !data.announcements.some((a) => a.date >= weekAgo);
   }
@@ -169,8 +168,8 @@
     if (data.attendance[0]) items.push(['Last attendance', `In ${data.attendance[0].time_in || '-'}, out ${data.attendance[0].time_out || '-'}`, fmtDate(data.attendance[0].work_date)]);
     if (data.payslips[0]) items.push(['Latest payslip', `Net ${peso(data.payslips[0].net_pay)}`, fmtPeriod(data.payslips[0].pay_period)]);
     $('activity-list').innerHTML = items.length ? items.map(([title, text, when], i) =>
-      `<li><span class="swatch ${i === 1 ? 'c2' : i === 2 ? 'c1' : ''}"></span><div><strong>${esc(title)}</strong><small class="muted">${esc(text)}</small><small class="muted">${esc(when)}</small></div></li>`).join('')
-      : '<li class="muted small">Nothing yet.</li>';
+      `<li><span class="swatch ${i === 1 ? 'c2' : i === 2 ? 'c1' : ''}" aria-hidden="true"></span><div><strong>${esc(title)}</strong><small>${esc(text)}</small><small>${esc(when)}</small></div></li>`).join('')
+      : '<li class="empty muted small">Nothing yet.</li>';
   }
 
   function renderAll() {
@@ -196,6 +195,7 @@
   }
 
   function openLeave() {
+    if (!data) return;
     $('lv-type').innerHTML = data.leave_types.map((t) => `<option>${esc(t)}</option>`).join('');
     const today = localToday();
     $('lv-start').value = today; $('lv-end').value = today;
@@ -221,10 +221,20 @@
   }
 
   /* ---------- navigation ---------- */
+  function scrollTop() {
+    // On desktop the page scrolls inside .main-content; on small screens it scrolls the window.
+    $('main').scrollTo({ top: 0 });
+    window.scrollTo(0, 0);
+  }
+
   function showPage(name) {
     document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p.id === `page-${name}`));
-    document.querySelectorAll('#sidebar li').forEach((li) => li.classList.toggle('active', li.dataset.page === name));
-    window.scrollTo(0, 0);
+    document.querySelectorAll('#sidebar li').forEach((li) => {
+      const on = li.dataset.page === name;
+      li.classList.toggle('active', on);
+      if (on) li.setAttribute('aria-current', 'page'); else li.removeAttribute('aria-current');
+    });
+    scrollTop();
     if (mobile()) setNav(false);
   }
 
@@ -232,7 +242,6 @@
     if (mobile()) document.body.classList.toggle('nav-open', open);
     else document.body.classList.toggle('nav-collapsed', !open);
     $('menu-toggle').setAttribute('aria-expanded', String(open));
-    $('menu-toggle').querySelector('i').className = open ? 'far fa-square-caret-left' : 'far fa-square-caret-right';
   }
   const navOpen = () => (mobile() ? document.body.classList.contains('nav-open') : !document.body.classList.contains('nav-collapsed'));
 
@@ -243,9 +252,20 @@
 
   function bind() {
     $('menu-toggle').addEventListener('click', () => setNav(!navOpen()));
+
+    // Reset the sidebar when crossing the mobile breakpoint
+    mobileQuery.addEventListener('change', () => {
+      document.body.classList.remove('nav-open', 'nav-collapsed');
+      setNav(!mobile());
+    });
+    // Tapping the content closes the mobile drawer
+    $('main').addEventListener('click', () => { if (mobile() && navOpen()) setNav(false); });
+
     $('user-btn').addEventListener('click', (e) => { e.stopPropagation(); setUserMenu($('user-menu').hidden); });
     document.addEventListener('click', (e) => { if (!e.target.closest('.user-menu')) setUserMenu(false); });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setUserMenu(false); });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !$('user-menu').hidden) { setUserMenu(false); $('user-btn').focus(); }
+    });
     $('user-menu').addEventListener('click', (e) => {
       const item = e.target.closest('[data-page]');
       if (item) showPage(item.dataset.page);
@@ -272,11 +292,13 @@
     $('att-btn').addEventListener('click', toggleAttendance);
     $('open-leave').addEventListener('click', openLeave);
     $('lv-cancel').addEventListener('click', () => $('leave-dialog').close());
+    $('leave-dialog').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); }); // backdrop click
     $('leave-form').addEventListener('submit', submitLeave);
     $('lv-start').addEventListener('change', () => { if ($('lv-end').value < $('lv-start').value) $('lv-end').value = $('lv-start').value; });
 
     if (mobile()) setNav(false);
-    setInterval(() => { if (data) renderAttendanceCard(); }, 30000);   // keeps "hours worked today" ticking
+    setInterval(() => { if (data && !document.hidden) renderAttendanceCard(); }, 30000);   // keeps "hours worked today" ticking
+    document.addEventListener('visibilitychange', () => { if (data && !document.hidden) renderAttendanceCard(); });
   }
 
   document.addEventListener('DOMContentLoaded', async () => {
