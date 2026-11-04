@@ -78,6 +78,12 @@ def require_json_and_csrf_for_writes():
         if not expected_token or not supplied_token or not hmac.compare_digest(expected_token, supplied_token):
             return jsonify(error="Invalid or missing CSRF token."), 403
 
+    if request.path == "/logout" and request.method == "POST":
+        expected_token = session.get("csrf_token", "")
+        supplied_token = request.form.get("csrf_token", "")
+        if not expected_token or not supplied_token or not hmac.compare_digest(expected_token, supplied_token):
+            return jsonify(error="Invalid or missing CSRF token."), 403
+
 
 @app.errorhandler(ApiError)
 def handle_api_error(e):
@@ -520,7 +526,7 @@ def settings_password():
     return jsonify(message="Password updated.")
 
 
-@app.route("/logout")
+@app.route("/logout", methods=["POST"])
 def logout():
     session.clear()
     return redirect("/")
