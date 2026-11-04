@@ -1,6 +1,6 @@
 import re
 import hmac
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 import mysql.connector
@@ -38,8 +38,10 @@ app.json = AppJSONProvider(app)
 app.secret_key = config.SECRET_KEY
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="Lax",                      # browsers won't send it on cross-site POSTs
-    SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE") == "1",   # set when served over HTTPS
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=(config.APP_ENV == "production" or os.environ.get("COOKIE_SECURE") == "1"),
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
+    SESSION_REFRESH_EACH_REQUEST=False,
 )
 
 app.register_blueprint(employee_bp)
@@ -174,6 +176,7 @@ def api_login():
     _FAILED_LOGINS.pop(throttle_key, None)
     session.clear()
     session["csrf_token"] = secrets.token_urlsafe(32)
+    session.permanent = True
     session["account_id"] = row["account_id"]
     session["role"] = row["role"]
     return jsonify(success=True, redirect=ROLE_HOME.get(row["role"], "/"))
