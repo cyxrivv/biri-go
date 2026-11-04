@@ -1,4 +1,5 @@
 import re
+import hmac
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
@@ -49,6 +50,14 @@ app.register_blueprint(owner_bp)
 ROLE_HOME = {"admin": "/admin", "hr": "/hr", "owner": "/owner", "employee": "/employee"}  # match your blueprint URLs
 
 
+@app.context_processor
+def inject_csrf_token():
+    """Make a session-bound CSRF token available to every rendered page."""
+    if "csrf_token" not in session:
+        session["csrf_token"] = secrets.token_urlsafe(32)
+    return {"csrf_token": session["csrf_token"]}
+
+
 @app.after_request
 def no_cache(resp):
     """Stop the browser Back button from showing a portal page after logout."""
@@ -58,11 +67,16 @@ def no_cache(resp):
 
 
 @app.before_request
-def require_json_for_writes():
-    """Cross-site forms can't send application/json, so this plus SameSite=Lax blocks CSRF."""
-    if request.method in ("POST", "PUT", "PATCH", "DELETE") and request.path.startswith("/api/") \
-            and not request.is_json:
-        return jsonify(error="Content-Type must be application/json."), 415
+def require_json_and_csrf_for_writes():
+    """Require JSON and a session-bound token for every state-changing API request."""
+    if request.method in ("POST", "PUT", "PATCH", "DELETE") and request.path.startswith("/api/"):
+        if not request.is_json:
+            return jsonify(error="Content-Type must be application/json."), 415
+
+        expected_token = session.get("csrf_token")
+        supplied_token = request.headers.get("X-CSRF-Token", "")
+        if not expected_token or not supplied_token or not hmac.compare_digest(expected_token, supplied_token):
+            return jsonify(error="Invalid or missing CSRF token."), 403
 
 
 @app.errorhandler(ApiError)
@@ -153,6 +167,7 @@ def api_login():
 
     _FAILED_LOGINS.pop(throttle_key, None)
     session.clear()
+    session["csrf_token"] = secrets.token_urlsafe(32)
     session["account_id"] = row["account_id"]
     session["role"] = row["role"]
     return jsonify(success=True, redirect=ROLE_HOME.get(row["role"], "/"))
