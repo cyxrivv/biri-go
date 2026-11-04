@@ -175,7 +175,7 @@ def api_login():
 
     # Employee IDs are generated as biri- followed by exactly six digits.
     # Reject malformed input before it reaches the database query.
-    if not re.fullmatch(r"biri-\\d{6}", code) or len(password) > 1024:
+    if not re.fullmatch(r"biri-\d{6}", code) or len(password) > 1024:
         _FAILED_LOGINS.setdefault(throttle_key, []).append(time.time())
         return jsonify(success=False, message="Invalid employee ID or password."), 401
 
