@@ -1,6 +1,5 @@
 import re
-import hmac
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 import mysql.connector
@@ -38,10 +37,8 @@ app.json = AppJSONProvider(app)
 app.secret_key = config.SECRET_KEY
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="Lax",
-    SESSION_COOKIE_SECURE=(config.APP_ENV == "production" or os.environ.get("COOKIE_SECURE") == "1"),
-    PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
-    SESSION_REFRESH_EACH_REQUEST=False,
+    SESSION_COOKIE_SAMESITE="Lax",                      # browsers won't send it on cross-site POSTs
+    SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE") == "1",   # set when served over HTTPS
 )
 
 app.register_blueprint(employee_bp)
@@ -52,48 +49,20 @@ app.register_blueprint(owner_bp)
 ROLE_HOME = {"admin": "/admin", "hr": "/hr", "owner": "/owner", "employee": "/employee"}  # match your blueprint URLs
 
 
-@app.context_processor
-def inject_csrf_token():
-    """Make a session-bound CSRF token available to every rendered page."""
-    if "csrf_token" not in session:
-        session["csrf_token"] = secrets.token_urlsafe(32)
-    return {"csrf_token": session["csrf_token"]}
-
-
 @app.after_request
 def no_cache(resp):
-    """Apply cache and browser security headers to every response."""
+    """Stop the browser Back button from showing a portal page after logout."""
     if request.path in ROLE_HOME.values():
         resp.headers["Cache-Control"] = "no-store"
-
-    # Defense in depth for browser-side injection and content sniffing.
-    # We avoid a restrictive script-src here because the current templates
-    # may contain inline scripts; XSS prevention still relies on safe output.
-    resp.headers["X-Content-Type-Options"] = "nosniff"
-    resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    resp.headers["Content-Security-Policy"] = (
-        "object-src 'none'; base-uri 'self'; frame-ancestors 'self'"
-    )
     return resp
 
 
 @app.before_request
-def require_json_and_csrf_for_writes():
-    """Require JSON and a session-bound token for every state-changing API request."""
-    if request.method in ("POST", "PUT", "PATCH", "DELETE") and request.path.startswith("/api/"):
-        if not request.is_json:
-            return jsonify(error="Content-Type must be application/json."), 415
-
-        expected_token = session.get("csrf_token")
-        supplied_token = request.headers.get("X-CSRF-Token", "")
-        if not expected_token or not supplied_token or not hmac.compare_digest(expected_token, supplied_token):
-            return jsonify(error="Invalid or missing CSRF token."), 403
-
-    if request.path == "/logout" and request.method == "POST":
-        expected_token = session.get("csrf_token", "")
-        supplied_token = request.form.get("csrf_token", "")
-        if not expected_token or not supplied_token or not hmac.compare_digest(expected_token, supplied_token):
-            return jsonify(error="Invalid or missing CSRF token."), 403
+def require_json_for_writes():
+    """Cross-site forms can't send application/json, so this plus SameSite=Lax blocks CSRF."""
+    if request.method in ("POST", "PUT", "PATCH", "DELETE") and request.path.startswith("/api/") \
+            and not request.is_json:
+        return jsonify(error="Content-Type must be application/json."), 415
 
 
 @app.errorhandler(ApiError)
@@ -163,21 +132,12 @@ def _too_many_attempts(key):
 @app.route("/api/login", methods=["POST"])
 def api_login():
     data = request.get_json(silent=True) or {}
-    raw_code = data.get("employee_code")
-    code = raw_code.strip().lower() if isinstance(raw_code, str) else ""
-    raw_password = data.get("password")
-    password = raw_password if isinstance(raw_password, str) else ""
+    code = (data.get("employee_code") or "").strip().lower()
+    password = data.get("password") or ""
 
-    # Keep throttle keys bounded even if someone submits an unusually long ID.
-    throttle_key = f"{request.remote_addr}|{code[:64]}"
+    throttle_key = f"{request.remote_addr}|{code}"
     if _too_many_attempts(throttle_key):
         return jsonify(success=False, message="Too many failed attempts. Try again in a few minutes."), 429
-
-    # Employee IDs are generated as biri- followed by exactly six digits.
-    # Reject malformed input before it reaches the database query.
-    if not re.fullmatch(r"biri-\d{6}", code) or len(password) > 1024:
-        _FAILED_LOGINS.setdefault(throttle_key, []).append(time.time())
-        return jsonify(success=False, message="Invalid employee ID or password."), 401
 
     with db() as (conn, cur):
         cur.execute(
@@ -193,8 +153,6 @@ def api_login():
 
     _FAILED_LOGINS.pop(throttle_key, None)
     session.clear()
-    session["csrf_token"] = secrets.token_urlsafe(32)
-    session.permanent = True
     session["account_id"] = row["account_id"]
     session["role"] = row["role"]
     return jsonify(success=True, redirect=ROLE_HOME.get(row["role"], "/"))
@@ -547,7 +505,7 @@ def settings_password():
     return jsonify(message="Password updated.")
 
 
-@app.route("/logout", methods=["POST"])
+@app.route("/logout")
 def logout():
     session.clear()
     return redirect("/")
