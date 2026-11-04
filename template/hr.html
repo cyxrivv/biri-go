@@ -44,7 +44,7 @@
                     </button>
                     <div class="menu" id="user-menu" hidden>
                         <a href="#settings" class="menu-item"><i class="fas fa-gear" aria-hidden="true"></i> HR settings</a>
-                        <a href="/logout" class="menu-item menu-danger"><i class="fas fa-right-from-bracket" aria-hidden="true"></i> Sign out</a>
+                        <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="menu-item menu-danger"><i class="fas fa-right-from-bracket" aria-hidden="true"></i> Sign out</button></form>
                     </div>
                 </div>
             </div>
