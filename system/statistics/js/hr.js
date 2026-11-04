@@ -39,12 +39,13 @@ const badge = s => `<span class="badge badge-${slug(s)}">${esc(s)}</span>`;
 async function api(url, options = {}) {
 
     const res = await fetch(url, {
-
-        headers: { "Content-Type": "application/json" },
-
+        ...options,
         credentials: "same-origin",
-         ...options,
-
+        headers: {
+            ...(options.headers || {}),
+            "Content-Type": "application/json",
+            "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]')?.content || "",
+        },
     });
 
     if (res.status === 401) {
@@ -295,11 +296,11 @@ const deptOpts = () => S.departments.map(d => ({ v: d.id, l: d.name }));
 
 const onLeaveOn = date => S.leaves.filter(l => l.status === "Approved" && l.from <= date && l.to >= date);
 
-const empty = (msg, cols) => cols ? `<tr><td colspan="${cols}" class="muted" style="text-align:center;padding:1.2rem">${msg}</td></tr>` : `<li class="muted">${msg}</li>`;
+const empty = (msg, cols) => cols ? `<tr><td colspan="${Number(cols) || 1}" class="muted" style="text-align:center;padding:1.2rem">${esc(msg)}</td></tr>` : `<li class="muted">${esc(msg)}</li>`;
 
 const btn = (act, id, icon, label, cls = "btn-secondary") =>
 
-    `<button type="button" class="btn ${cls} btn-sm" data-act="${act}" data-id="${id}" title="${label}" aria-label="${label}"><i class="fas fa-${icon}"></i></button>`;
+    `<button type="button" class="btn ${esc(cls)} btn-sm" data-act="${esc(act)}" data-id="${esc(id)}" title="${esc(label)}" aria-label="${esc(label)}"><i class="fas fa-${esc(icon)}"></i></button>`;
 
 
 
@@ -411,7 +412,7 @@ const formDefs = {
 
         { name: "position", label: "Position", required: true, value: r?.position },
 
-        { name: "salary", label: "Monthly Salary (₱)", type: "number", min: 0, step: "0.01", required: true, value: r?.salary ?? 0 },
+        { name: "salary", label: "Monthly Salary (â‚±)", type: "number", min: 0, step: "0.01", required: true, value: r?.salary ?? 0 },
 
         { name: "type", label: "Employment type", type: "select", options: EMP_TYPES, value: r?.type || "Full-time" },
 
@@ -473,7 +474,9 @@ const formDefs = {
 
         }] : []),
 
-    ], defaults: { status: "Pending" },
+    ],
+
+    defaults: { status: "Pending" },
 
         check: v => { if (v.to < v.from) throw new Error("End date can't be before the start date."); v.days = daysBetween(v.from, v.to); } }),
 
@@ -591,7 +594,7 @@ function fillSelect(sel, options, blank, keep = true) {
 
     const old = sel.value;
 
-    sel.innerHTML = (blank ? `<option value="">${blank}</option>` : "") + options.map(o => {
+    sel.innerHTML = (blank ? `<option value="">${esc(blank)}</option>` : "") + options.map(o => {
 
         o = typeof o === "object" ? o : { v: o, l: o };
 
@@ -645,7 +648,7 @@ function renderDashboard() {
 
 
 
-    $("#dash-leaves").innerHTML = pending.slice(0, 5).map(l => `<li><span><strong>${esc(empName(l.employee_id))}</strong><br><small class="muted">${esc(l.type)} · ${fmtDate(l.from)} – ${fmtDate(l.to)}</small></span>
+    $("#dash-leaves").innerHTML = pending.slice(0, 5).map(l => `<li><span><strong>${esc(empName(l.employee_id))}</strong><br><small class="muted">${esc(l.type)} Â· ${fmtDate(l.from)} â€“ ${fmtDate(l.to)}</small></span>
 
         <span>${btn("leave-approve", l.id, "check", "Approve", "btn-primary")} ${btn("leave-reject", l.id, "xmark", "Reject")}</span></li>`).join("") || empty("No pending requests.");
 
@@ -759,7 +762,7 @@ function renderProcesses() {
 
         return `<article class="report-box"><h3>${esc(empName(p.employee_id))} ${badge(p.kind)}</h3>
 
-            <div class="bar"><i style="width:${pct}%"></i></div><p class="muted">${done}/${p.tasks.length} tasks · ${pct === 100 ? "Completed" : "In progress"}</p>
+            <div class="bar"><i style="width:${pct}%"></i></div><p class="muted">${done}/${p.tasks.length} tasks Â· ${pct === 100 ? "Completed" : "In progress"}</p>
 
             <ul class="list">${p.tasks.map((t, i) => `<li><label><input type="checkbox" data-proc="${p.id}" data-i="${i}"${t.done ? " checked" : ""}> ${esc(t.title)}</label></li>`).join("")}</ul>
 
@@ -845,7 +848,7 @@ function renderLeaves() {
 
 
 
-function stars(n) { n = Number(n) || 0; return n ? "★".repeat(Math.round(n)) + "☆".repeat(5 - Math.round(n)) + ` <small class="muted">${n}</small>` : "-"; }
+function stars(n) { n = Number(n) || 0; return n ? "â˜…".repeat(Math.round(n)) + "â˜†".repeat(5 - Math.round(n)) + ` <small class="muted">${n}</small>` : "-"; }
 
 function renderPerformance() {
 
@@ -945,7 +948,7 @@ function renderChrome() {
 
     const items = [];
 
-    S.leaves.filter(l => l.status === "Pending").forEach(l => items.push(`<a href="#leaves"><i class="fas fa-calendar-check"></i> ${esc(empName(l.employee_id))} requested ${esc(l.type.toLowerCase())} </a>`));
+    S.leaves.filter(l => l.status === "Pending").forEach(l => items.push(`<a href="#leaves"><i class="fas fa-calendar-check"></i> ${esc(empName(l.employee_id))} requested ${esc(l.type.toLowerCase())} leave</a>`));
 
     if (n.recruitment) items.push(`<a href="#recruitment"><i class="fas fa-user-tie"></i> ${n.recruitment} new applicant(s)</a>`);
 
@@ -977,9 +980,9 @@ async function renderPayroll() {
         <tr>
             <td>${esc(p.employee_name || `${p.first_name || ""} ${p.last_name || ""}`.trim() || empName(p.employee_id))}</td>
             <td>${esc(String(p.pay_period || "").slice(0, 7) || "-")}</td>
-            <td>₱${Number(p.gross_pay || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</td>
-            <td>₱${Number(p.deductions || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</td>
-            <td>₱${Number(p.net_pay || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</td>
+            <td>â‚±${Number(p.gross_pay || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</td>
+            <td>â‚±${Number(p.deductions || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</td>
+            <td>â‚±${Number(p.net_pay || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</td>
             <td>${badge(p.payment_status || "Pending")}</td>
         </tr>
     `).join("");
@@ -1155,7 +1158,7 @@ function viewRecord(res, id) {
 
             ["Probation ends", fmtDate(addMonths(e.hired, +S.settings.probation_months || 6))],
 
-            ["Leave used this year", `Vacation ${used("Vacation Leave (PTO)")} · Sick ${used("Sick Leave")} · Emergency ${used("Emergency Leave")}`]]));
+            ["Leave used this year", `Vacation ${used("Vacation Leave (PTO)")} Â· Sick ${used("Sick Leave")} Â· Emergency ${used("Emergency Leave")}`]]));
 
     } else if (res === "applicants") {
 

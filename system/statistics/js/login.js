@@ -30,7 +30,7 @@ function formatCode(raw) {
 
 function showAlert(message, type = 'error') {
     alertText.textContent = message;
-    alertBox.className = 'login-alert ' + type;
+    alertBox.classList.toggle('success', type !== 'error');
     alertIcon.className = type === 'error'
         ? 'fas fa-circle-exclamation'
         : type === 'info' ? 'fas fa-circle-info' : 'fas fa-circle-check';
@@ -50,8 +50,8 @@ function shakeCard() {
 function setLoading(on, label) {
     loginBtn.disabled = on;
     loginSpinner.hidden = !on;
-    if (loginIcon) loginIcon.hidden = on;
-    loginLabel.textContent = label || (on ? 'Signing in...' : 'Sign in');
+    loginIcon.hidden = on;
+    loginLabel.textContent = label || (on ? 'Logging in...' : 'Log In');
 }
 
 function clearFieldError(input, errorEl) {
@@ -94,7 +94,7 @@ passwordInput.addEventListener('blur', () => { capsWarning.hidden = true; });
 toggleBtn.addEventListener('click', () => {
     const show = passwordInput.type === 'password';
     passwordInput.type = show ? 'text' : 'password';
-    toggleBtn.textContent = show ? 'Hide' : 'Show';
+    toggleBtn.querySelector('i').className = show ? 'fas fa-eye-slash' : 'fas fa-eye';
     toggleBtn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
     passwordInput.focus();
 });
@@ -145,7 +145,10 @@ async function sendLogin(code, password) {
     try {
         const res = await fetch(LOGIN_URL, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || '',
+            },
             body: JSON.stringify({ employee_code: code, password }),
             signal: controller.signal,
         });
