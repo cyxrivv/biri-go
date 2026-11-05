@@ -94,6 +94,27 @@ ul { list-style: none; }
     white-space: nowrap;
 }
 
+.brand i {
+    width: 2.5rem;
+    height: 2.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    background-color: var(--brand-500);
+    color: var(--brand-900);
+    font-size: 1.1rem;
+}
+
+.brand-logo {
+    height: 2.5rem;
+    width: 2.5rem;
+    padding: 0.35rem;
+    object-fit: contain;
+    border-radius: 10px;
+    background-color: var(--brand-500);
+}
+
 .portal {
     font-size: 0.72rem;
     font-weight: 600;

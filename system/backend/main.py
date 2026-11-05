@@ -436,7 +436,7 @@ def api_reports():
 
     return jsonify(
         summary={
-            "total_employees": int(summary["total_employees"]),
+            "total_employees": int(summary["total_employees"]), 
             "active_employees": int(summary["active_employees"]),
             "total_payroll": float(summary["total_payroll"]),
         },
