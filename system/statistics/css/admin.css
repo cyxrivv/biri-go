@@ -635,6 +635,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 select,
 input[type="text"],
 input[type="email"],
+input[type="tel"],
 input[type="password"],
 input[type="date"],
 input[type="number"] {
@@ -652,6 +653,7 @@ input[type="number"] {
 select:focus,
 input[type="text"]:focus,
 input[type="email"]:focus,
+input[type="tel"]:focus,
 input[type="password"]:focus,
 input[type="date"]:focus,
 input[type="number"]:focus {
