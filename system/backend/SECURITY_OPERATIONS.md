@@ -38,6 +38,10 @@ The dump uses a single transaction and skips table locks. The database tables sh
 
 Backups contain employee personal information, account hashes, attendance, leave, and payroll data. Store them in a restricted folder, copy them to protected storage, and never commit them to Git.
 
+You can also manage backups from the Admin portal: open **Backups** in the sidebar, then use **Create Backup**, **Restore**, or **Delete**. The dashboard lists each backup's filename, creation time, and size. The restore action verifies the archive in a temporary database and creates a safety backup of the live database before importing it.
+
+For the dashboard's restore action, set DB_RESTORE_USER and DB_RESTORE_PASSWORD in the environment used to start the Flask application. Those credentials must be able to create/drop a temporary verification database and restore the dump into biri_go. Do not use the restricted biri_app account for restoration.
+
 ## 3. Verify a backup without touching the live database
 
 Set temporary restore-administrator credentials in the shell. The account must be able to create and drop a temporary database and import the dump:
