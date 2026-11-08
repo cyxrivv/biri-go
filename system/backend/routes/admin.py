@@ -1,4 +1,10 @@
-from flask import Blueprint, jsonify, request, session
+import re
+from datetime import date, datetime
+from pathlib import Path
+
+from flask import Blueprint, current_app, jsonify, request, session
+
+from backup_restore import BACKUP_DIR, CONFIRM_TEXT, create_backup, restore_backup, verify_backup
 
 from auth import role_required
 from db import db, fetch_all, fetch_one, log_activity
@@ -349,3 +355,88 @@ def delete_leave(leave_id):
         cur.execute("DELETE FROM leave_requests WHERE leave_id = %s", (leave_id,))
         log_activity(cur, f"Deleted leave request #{leave_id}")
     return jsonify(message="Leave request deleted.")
+
+# --------------------------------------------------------------------------
+# Database backups (administrator only)
+# --------------------------------------------------------------------------
+_BACKUP_NAME_RE = re.compile(r"^biri_go_\\d{8}_\\d{6}_\\d{6}\\.sql\\.gz$")
+
+
+def _backup_file(filename):
+    if not isinstance(filename, str) or not _BACKUP_NAME_RE.fullmatch(filename):
+        raise ApiError("Invalid backup filename.", 400)
+    root = BACKUP_DIR.resolve()
+    path = (root / filename).resolve()
+    if path.parent != root or not path.is_file():
+        raise ApiError("Backup file not found.", 404)
+    return path
+
+
+@admin_bp.get("/api/admin/backups")
+@role_required("admin")
+def list_backups():
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    items = []
+    for path in BACKUP_DIR.iterdir():
+        if not path.is_file() or not _BACKUP_NAME_RE.fullmatch(path.name):
+            continue
+        stat = path.stat()
+        items.append({
+            "filename": path.name,
+            "size": stat.st_size,
+            "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(timespec="seconds"),
+        })
+    items.sort(key=lambda item: item["created_at"], reverse=True)
+    return jsonify(items=items)
+
+
+@admin_bp.post("/api/admin/backups")
+@role_required("admin")
+def create_admin_backup():
+    try:
+        path = create_backup()
+    except Exception:
+        current_app.logger.exception("Admin database backup failed")
+        raise ApiError(
+            "Could not create a database backup. Check the MySQL client tools and database permissions.",
+            500,
+        )
+    return jsonify(
+        message="Backup created successfully.",
+        backup={"filename": path.name, "size": path.stat().st_size},
+    ), 201
+
+
+@admin_bp.delete("/api/admin/backups/<filename>")
+@role_required("admin")
+def delete_admin_backup(filename):
+    path = _backup_file(filename)
+    try:
+        path.unlink()
+    except OSError:
+        current_app.logger.exception("Admin could not delete backup %s", filename)
+        raise ApiError("Could not delete the selected backup.", 500)
+    return jsonify(message="Backup deleted.")
+
+
+@admin_bp.post("/api/admin/backups/<filename>/restore")
+@role_required("admin")
+def restore_admin_backup(filename):
+    path = _backup_file(filename)
+    try:
+        # Prove the archive can be imported before touching the live database.
+        verify_backup(path)
+        # Keep a safety copy of the current live database before the restore.
+        safety_backup = create_backup()
+        restore_backup(path, CONFIRM_TEXT)
+    except Exception:
+        current_app.logger.exception("Admin database restore failed for %s", filename)
+        raise ApiError(
+            "Restore failed. The current database was not intentionally changed before backup verification; "
+            "check server logs and any safety backup before retrying.",
+            500,
+        )
+    return jsonify(
+        message="Database restored successfully.",
+        safety_backup=safety_backup.name,
+    )
