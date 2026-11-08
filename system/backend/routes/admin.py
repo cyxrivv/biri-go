@@ -3,7 +3,7 @@ from datetime import date, datetime
 
 from flask import Blueprint, current_app, jsonify, request, session
 
-from backup_restore import BACKUP_DIR, CONFIRM_TEXT, create_backup, restore_backup, verify_backup
+from backup_restore import (BACKUP_DIR, CONFIRM_TEXT, create_backup, database_exists,\n                            restore_backup, verify_backup)
 
 from auth import role_required
 from db import db, fetch_all, fetch_one, log_activity
@@ -423,8 +423,16 @@ def restore_admin_backup(filename):
     try:
         # Prove the archive can be imported before touching the live database.
         verify_backup(path)
-        # Keep a safety copy of the current live database before the restore.
-        safety_backup = create_backup()
+
+        # A dropped schema cannot be dumped. Preserve it when it still exists;
+        # when it is already missing, proceed directly to schema recreation.
+        if database_exists():
+            safety_backup = create_backup()
+            safety_backup_name = safety_backup.name
+        else:
+            safety_backup_name = None
+
+        # restore_backup recreates the schema before importing the verified dump.
         restore_backup(path, CONFIRM_TEXT)
     except Exception:
         current_app.logger.exception("Admin database restore failed for %s", filename)
@@ -435,5 +443,5 @@ def restore_admin_backup(filename):
         )
     return jsonify(
         message="Database restored successfully.",
-        safety_backup=safety_backup.name,
+        safety_backup=safety_backup_name,\n        message=("Database restored successfully." if safety_backup_name else\n                 "Database restored successfully. The missing schema was recreated; no safety backup was possible."),
     )
