@@ -142,7 +142,7 @@ def verify_backup(backup_path):
     if not backup_path.is_file():
         raise RuntimeError("Backup file not found: %s" % backup_path)
 
-    stamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    stamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
     scratch = "biri_go_verify_%s_%s" % (stamp, os.getpid())
     args, env = _mysql_import_args()
     create_sql = (
