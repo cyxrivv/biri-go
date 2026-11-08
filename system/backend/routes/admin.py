@@ -3,7 +3,14 @@ from datetime import date, datetime
 
 from flask import Blueprint, current_app, jsonify, request, session
 
-from backup_restore import (BACKUP_DIR, CONFIRM_TEXT, create_backup, database_exists,\n                            restore_backup, verify_backup)
+from backup_restore import (
+    BACKUP_DIR,
+    CONFIRM_TEXT,
+    create_backup,
+    database_exists,
+    restore_backup,
+    verify_backup,
+)
 
 from auth import role_required
 from db import db, fetch_all, fetch_one, log_activity
