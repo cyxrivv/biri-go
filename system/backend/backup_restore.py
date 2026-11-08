@@ -118,6 +118,59 @@ def _mysql_import_args(database=None):
     return args, _password_env(password)
 
 
+def _database_name():
+    """Return a safely quoted configured database identifier."""
+    name = str(config.DB_NAME)
+    if not name or not name.replace("_", "").replace("$", "").isalnum():
+        raise RuntimeError("DB_NAME contains unsupported characters.")
+    return "`%s`" % name
+
+
+def database_exists():
+    """Check the target schema using the dedicated restore administrator."""
+    args, env = _mysql_import_args()
+    query = (
+        "SELECT COUNT(*) FROM information_schema.schemata "
+        "WHERE schema_name = %s" % ("'%s'" % config.DB_NAME.replace("'", "''"))
+    )
+    result = subprocess.run(
+        args + ["--batch", "--skip-column-names", "--execute=%s" % query],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Could not check whether the target database exists: %s"
+            % result.stderr.decode("utf-8", "replace").strip()
+        )
+    return result.stdout.decode("utf-8", "replace").strip() == "1"
+
+
+def _recreate_target_database():
+    """Recreate the configured schema so the restored snapshot is exact."""
+    args, env = _mysql_import_args()
+    database = _database_name()
+    statements = (
+        "DROP DATABASE IF EXISTS %s; "
+        "CREATE DATABASE %s CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+        % (database, database)
+    )
+    result = subprocess.run(
+        args + ["--execute=%s" % statements],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Could not recreate the target database: %s"
+            % result.stderr.decode("utf-8", "replace").strip()
+        )
+
+
 def _import_dump(backup_path, database):
     args, env = _mysql_import_args(database)
     with gzip.open(backup_path, "rb") as source:
@@ -221,6 +274,7 @@ def restore_backup(backup_path, confirmation):
         raise RuntimeError("Backup file not found: %s" % backup_path)
 
     print("Restoring %s into database %s..." % (backup_path, config.DB_NAME))
+    _recreate_target_database()
     _import_dump(backup_path, config.DB_NAME)
     print("Restore command completed. Review the application and database after restoration.")
 
