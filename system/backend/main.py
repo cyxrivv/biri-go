@@ -71,8 +71,16 @@ def no_cache(resp):
     resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     resp.headers["Content-Security-Policy"] = (
-        "object-src 'none'; base-uri 'self'; frame-ancestors 'self'"
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; "
+        "font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com data:; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "object-src 'none'; base-uri 'self'; "
+        "frame-ancestors 'self'; form-action 'self'"
     )
+    resp.headers["X-Frame-Options"] = "SAMEORIGIN"
     return resp
 
 
