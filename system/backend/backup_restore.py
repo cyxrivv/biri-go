@@ -195,13 +195,19 @@ def verify_backup(backup_path):
         return table_count
     finally:
         if created:
-            subprocess.run(
+            cleanup = subprocess.run(
                 args + ["--execute=%s" % drop_sql],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 env=env,
                 check=False,
             )
+            if cleanup.returncode != 0:
+                print(
+                    "WARNING: temporary verification database %s could not be removed."
+                    % scratch,
+                    file=sys.stderr,
+                )
 
 
 def restore_backup(backup_path, confirmation):
@@ -245,7 +251,7 @@ def main():
             verify_backup(args.backup_file)
         elif args.command == "restore":
             restore_backup(args.backup_file, args.confirm)
-    except (OSError, RuntimeError, ValueError, EOFError, gzip.BadGzipFile) as exc:
+    except Exception as exc:
         print("Backup operation failed: %s" % exc, file=sys.stderr)
         return 1
     return 0
