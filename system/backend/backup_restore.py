@@ -56,7 +56,7 @@ def create_backup(output_path=None):
     dump = _find_client("mysqldump")
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     if output_path is None:
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         output_path = BACKUP_DIR / ("biri_go_%s.sql.gz" % stamp)
     else:
         output_path = Path(output_path).expanduser().resolve()
@@ -68,6 +68,7 @@ def create_backup(output_path=None):
         "--skip-lock-tables",
         "--no-tablespaces",
         "--skip-triggers",
+        "--set-gtid-purged=OFF",
         config.DB_NAME,
     ]
 
@@ -142,7 +143,7 @@ def verify_backup(backup_path):
         raise RuntimeError("Backup file not found: %s" % backup_path)
 
     stamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    scratch = "biri_go_verify_%s" % stamp
+    scratch = "biri_go_verify_%s_%s" % (stamp, os.getpid())
     args, env = _mysql_import_args()
     create_sql = (
         "CREATE DATABASE %s CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci" % scratch
@@ -244,7 +245,7 @@ def main():
             verify_backup(args.backup_file)
         elif args.command == "restore":
             restore_backup(args.backup_file, args.confirm)
-    except (OSError, RuntimeError, ValueError, gzip.BadGzipFile) as exc:
+    except (OSError, RuntimeError, ValueError, EOFError, gzip.BadGzipFile) as exc:
         print("Backup operation failed: %s" % exc, file=sys.stderr)
         return 1
     return 0
