@@ -226,6 +226,7 @@ def api_login():
 
 ACCOUNT_ROLES = ("admin", "hr", "owner", "employee")
 SEX_VALUES = ("Male", "Female")
+PERSON_NAME_RE = re.compile(r"^[^\W\d_]+(?:[ .'-][^\W\d_]+)*$", re.UNICODE)
 
 
 def _json_object():
@@ -246,12 +247,12 @@ def parse_employee_form(data, require_job=True):
     suffix, sex, phone = _text(data, "suffix"), _text(data, "sex"), _text(data, "phone")
     email = _text(data, "email").lower()
 
-    if not first or len(first) > 50:
-        raise ApiError("First name is required (max 50 characters).")
-    if len(middle) > 50:
-        raise ApiError("Middle name is too long (max 50 characters).")
-    if not last or len(last) > 50:
-        raise ApiError("Last name is required (max 50 characters).")
+    if not first or len(first) > 50 or not PERSON_NAME_RE.fullmatch(first):
+        raise ApiError("First name is required and must contain letters only (spaces, periods, apostrophes, and hyphens are allowed).")
+    if len(middle) > 50 or (middle and not PERSON_NAME_RE.fullmatch(middle)):
+        raise ApiError("Middle name must contain letters only (spaces, periods, apostrophes, and hyphens are allowed).")
+    if not last or len(last) > 50 or not PERSON_NAME_RE.fullmatch(last):
+        raise ApiError("Last name is required and must contain letters only (spaces, periods, apostrophes, and hyphens are allowed).")
     if not suffix:
         raise ApiError("Suffix is required. Enter 'None' if you don't have one.")
     if len(suffix) > 20:
@@ -270,8 +271,8 @@ def parse_employee_form(data, require_job=True):
 
     if not email or not EMAIL_RE.match(email) or len(email) > 100:
         raise ApiError("A valid email is required.")
-    if len(phone) > 20:
-        raise ApiError("Phone number is too long (max 20 characters).")
+    if phone and not re.fullmatch(r"09\d{9}", phone):
+        raise ApiError("Phone number must be an 11-digit Philippine mobile number starting with 09.")
 
     department_id = position_id = None
     if require_job:
