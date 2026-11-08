@@ -1,0 +1,13 @@
+-- Biri-Go least-privilege application account (MySQL 8).
+-- Run this as a database administrator AFTER creating/upgrading the schema.
+-- Replace the example password with a unique, long password before running.
+
+CREATE USER IF NOT EXISTS 'biri_app'@'localhost'
+    IDENTIFIED BY 'REPLACE_WITH_A_UNIQUE_LONG_RANDOM_PASSWORD';
+
+GRANT SELECT, INSERT, UPDATE, DELETE
+    ON biri_go.*
+    TO 'biri_app'@'localhost';
+
+-- This account intentionally receives no CREATE, ALTER, DROP, FILE,
+-- GRANT OPTION, SUPER, or other administrative privileges.

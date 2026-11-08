@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1b4332">
     <meta name="robots" content="noindex, nofollow">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <title>Admin | Biri-Go</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <link rel="stylesheet" href="/statistics/css/admin.css">
@@ -47,7 +48,12 @@
                     </button>
                     <div class="menu" id="user-menu" hidden>
                         <button type="button" data-section="setting"><i class="fa-regular fa-id-card" aria-hidden="true"></i> My account</button>
-                        <a href="/logout"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> Sign out</a>
+                        <form method="POST" action="/logout" style="display: inline;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <button type="submit" style="background: none; border: none; cursor: pointer; color: inherit; font: inherit;">
+                                <i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> Sign out
+                            </button>
+                        </form>
                     </div>
                 </div>
             </div>
@@ -65,6 +71,7 @@
                         <li data-section="salaries" tabindex="0" role="button"><i class="fa-solid fa-wallet" aria-hidden="true"></i>Salaries</li>
                         <li data-section="leaves" tabindex="0" role="button"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i>Leaves</li>
                         <li data-section="reports" tabindex="0" role="button"><i class="fa-solid fa-chart-column" aria-hidden="true"></i>Reports</li>
+                        <li data-section="backup" tabindex="0" role="button"><i class="fa-solid fa-database" aria-hidden="true"></i>Backups</li>
                         <li data-section="setting" tabindex="0" role="button"><i class="fa-solid fa-sliders" aria-hidden="true"></i>Settings</li>
                     </ul>
                 </nav>
@@ -325,6 +332,38 @@
                     </section>
                 </div>
 
+                <!-- Backups page -->
+                <div id="page-backup" class="page">
+                    <section class="section">
+                        <div class="section-header">
+                            <div>
+                                <h2>Database Backups</h2>
+                                <p class="muted">Create, restore, and delete protected database backups.</p>
+                            </div>
+                            <div class="section-actions">
+                                <button type="button" id="backup-refresh" class="btn btn-secondary">
+                                    <i class="fa-solid fa-rotate"></i> Refresh
+                                </button>
+                                <button type="button" id="backup-create" class="btn btn-primary">
+                                    <i class="fa-solid fa-database"></i> Create Backup
+                                </button>
+                            </div>
+                        </div>
+                        <p class="muted">Restoring replaces current database contents. A safety backup is created automatically before restoration.</p>
+                        <div class="table-container">
+                            <table id="backups-table">
+                                <thead>
+                                    <tr><th>Backup File</th><th>Created</th><th>Size</th><th>Actions</th></tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td colspan="4" class="empty-row">Open this page to load backups.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <p id="backup-error" class="form-error" hidden></p>
+                    </section>
+                </div>
+
                 <!-- Settings page -->
                 <div id="page-setting" class="page">
                     <section class="section">
@@ -382,13 +421,22 @@
                         <input type="text" id="acc-first" required maxlength="50">
                     </label>
                     <label>Middle name
-                        <input type="text" id="acc-middle" maxlength="50">
+                        <input type="text" id="acc-middle" autocomplete="given-name" maxlength="50">
                     </label>
                     <label>Last name
-                        <input type="text" id="acc-last" required maxlength="50">
+                        <input type="text" id="acc-last" autocomplete="given-name" required maxlength="50">
                     </label>
                     <label>Suffix
-                        <input type="text" id="acc-suffix" required maxlength="20" placeholder="Enter None if none">
+                        <select id="acc-suffix" required>
+                            <option value="None" selected>None</option>
+                            <option value="Jr.">Jr.</option>
+                            <option value="Sr.">Sr.</option>
+                            <option value="II">II</option>
+                            <option value="III">III</option>
+                            <option value="IV">IV</option>
+                            <option value="V">V</option>
+                            <option value="VI">VI</option>
+                        </select>
                     </label>
                     <label>Sex
                         <select id="acc-sex" required>
@@ -404,7 +452,7 @@
                         <input type="email" id="acc-email" required maxlength="100" autocomplete="off">
                     </label>
                     <label>Phone
-                        <input type="text" id="acc-phone" maxlength="20">
+                        <input type="tel" id="acc-phone" inputmode="numeric" maxlength="11" pattern="09[0-9]{9}" placeholder="09XXXXXXXXX" title="Enter an 11-digit Philippine mobile number starting with 09">
                     </label>
                     <label>Role
                         <select id="acc-role" required>
@@ -450,13 +498,13 @@
                 <input type="hidden" id="emp-id">
                 <div class="form-grid">
                     <label>First name
-                        <input type="text" id="emp-first" required maxlength="50">
+                        <input type="text" id="emp-first" autocomplete="given-name" required maxlength="50">
                     </label>
                     <label>Middle name
-                        <input type="text" id="emp-middle" maxlength="50">
+                        <input type="text" id="emp-middle" autocomplete="given-name" maxlength="50">
                     </label>
                     <label>Last name
-                        <input type="text" id="emp-last" required maxlength="50">
+                        <input type="text" id="emp-last" autocomplete="given-name" required maxlength="50">
                     </label>
                     <label>Suffix
                         <input type="text" id="emp-suffix" required maxlength="20" placeholder="Enter None if none">
@@ -475,7 +523,7 @@
                         <input type="email" id="emp-email" required maxlength="100" autocomplete="off">
                     </label>
                     <label>Phone
-                        <input type="text" id="emp-phone" maxlength="20">
+                        <input type="tel" id="emp-phone" inputmode="numeric" maxlength="11" pattern="09[0-9]{9}" placeholder="09XXXXXXXXX" title="Enter an 11-digit Philippine mobile number starting with 09">
                     </label>
                     <label>Department
                         <select id="emp-department" required></select>
