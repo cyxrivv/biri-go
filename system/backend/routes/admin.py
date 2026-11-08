@@ -10,8 +10,6 @@ from auth import role_required
 from db import db, fetch_all, fetch_one, log_activity
 from utils import (ApiError, clean, to_int, json_body, LEAVE_ALLOWANCE,
                    purge_employee, validate_leave_request)
-from datetime import date
-
 admin_bp = Blueprint("admin", __name__)
 
 
@@ -359,7 +357,7 @@ def delete_leave(leave_id):
 # --------------------------------------------------------------------------
 # Database backups (administrator only)
 # --------------------------------------------------------------------------
-_BACKUP_NAME_RE = re.compile(r"^biri_go_\\d{8}_\\d{6}_\\d{6}\\.sql\\.gz$")
+_BACKUP_NAME_RE = re.compile(r"^biri_go_\d{8}_\d{6}_\d{6}\.sql\.gz$")
 
 
 def _backup_file(filename):
@@ -432,8 +430,8 @@ def restore_admin_backup(filename):
     except Exception:
         current_app.logger.exception("Admin database restore failed for %s", filename)
         raise ApiError(
-            "Restore failed. The current database was not intentionally changed before backup verification; "
-            "check server logs and any safety backup before retrying.",
+            "Restore did not complete. A safety backup may have been created; "
+            "inspect the database and server logs before retrying.",
             500,
         )
     return jsonify(
