@@ -38,9 +38,9 @@ The dump uses a single transaction and skips table locks. The database tables sh
 
 Backups contain employee personal information, account hashes, attendance, leave, and payroll data. Store them in a restricted folder, copy them to protected storage, and never commit them to Git.
 
-You can also manage backups from the Admin portal: open **Backups** in the sidebar, then use **Create Backup**, **Restore**, or **Delete**. The dashboard lists each backup's filename, creation time, and size. The restore action verifies the archive in a temporary database and creates a safety backup of the live database before importing it.
+You can also manage backups from the Admin portal: open **Backups** in the sidebar, then use **Create Backup**, **Restore**, or **Delete**. The dashboard lists each backup's filename, creation time, and size. The restore action verifies the archive in a temporary database. If the live biri_go schema exists, it creates a safety backup before replacing the schema. If the schema has already been dropped, it skips the impossible safety backup, recreates biri_go, and imports the verified archive.
 
-For the dashboard's restore action, set DB_RESTORE_USER and DB_RESTORE_PASSWORD in the environment used to start the Flask application. Those credentials must be able to create/drop a temporary verification database and restore the dump into biri_go. Do not use the restricted biri_app account for restoration.
+For the dashboard's restore action, set DB_RESTORE_USER and DB_RESTORE_PASSWORD in the environment used to start the Flask application. Those credentials must be able to create/drop a temporary verification database, check information_schema, drop and recreate biri_go, and restore the dump into it. Do not use the restricted biri_app account for restoration. Keep the Flask process running and the authenticated admin session available while using the dashboard restore button; after the schema is recreated, reload the page if the current request or dashboard data still shows a database connection error.
 
 ## 3. Verify a backup without touching the live database
 
@@ -58,7 +58,7 @@ Verification requires MySQL administrator permissions for temporary database cre
 
 ## 4. Restore a backup
 
-Restoring is destructive: the SQL dump can drop and recreate tables in the configured database. First create a fresh backup of the current database and confirm that the selected backup is the one you intend to restore.
+Restoring is destructive: the restore utility drops and recreates the configured database schema, then imports the selected dump. When the schema exists, the Admin dashboard creates a fresh safety backup first. When the schema is already missing, no safety backup can be made, so the verified selected backup is used to recreate it. Confirm that the selected backup is the one you intend to restore.
 
 Set DB_RESTORE_USER and DB_RESTORE_PASSWORD to a database administrator account, then run:
 
