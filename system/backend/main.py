@@ -7,6 +7,7 @@ import mysql.connector
 from flask import Flask, jsonify, render_template
 from flask import session, redirect
 from flask import request
+from werkzeug.exceptions import HTTPException
 import secrets
 import os
 import sys
@@ -110,6 +111,8 @@ def handle_api_error(e):
 @app.errorhandler(mysql.connector.Error)
 def handle_db_error(e):
     errno = getattr(e, "errno", None)
+    sqlstate = getattr(e, "sqlstate", None)
+
     if errno == 1062:
         return jsonify(error="That value already exists (duplicate entry)."), 409
     if errno == 1451:
@@ -118,20 +121,37 @@ def handle_db_error(e):
         ), 409
     if errno == 1452:
         return jsonify(error="A referenced record doesn't exist."), 400
+
     if errno in (1045, 1049, 2002, 2003, 2013):
-        app.logger.error("Database connection problem: %s", e)
+        app.logger.error(
+            "Database connection failed (errno=%s, sqlstate=%s).", errno, sqlstate
+        )
+        return jsonify(error="The database is temporarily unavailable."), 503
+
+    if errno in (1054, 1146):
+        app.logger.error(
+            "Database schema error (errno=%s, sqlstate=%s).", errno, sqlstate
+        )
         return jsonify(
-            error="Can't connect to the database. Check DB_HOST / DB_USER / "
-                  "DB_PASSWORD / DB_NAME in config.py and that MySQL is running."
-        ), 503
-    if errno == 1146:
-        app.logger.error("Missing table: %s", e)
-        return jsonify(error="Database table missing: " + str(getattr(e, "msg", e))), 500
-    if errno == 1054:
-        app.logger.error("Missing column: %s", e)
-        return jsonify(error="Database column missing: " + str(getattr(e, "msg", e))), 500
-    app.logger.exception("Database error")
-    return jsonify(error="Database error."), 500
+            error="The database schema is not ready. Contact the system administrator."
+        ), 500
+
+    app.logger.error(
+        "Database operation failed (errno=%s, sqlstate=%s).", errno, sqlstate
+    )
+    return jsonify(error="A database operation failed."), 500
+
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(e):
+    # Keep normal HTTP errors (404, 405, etc.) and their status codes intact.
+    if isinstance(e, HTTPException):
+        return e
+
+    app.logger.exception("Unhandled application error")
+    if request.path.startswith("/api/"):
+        return jsonify(error="An unexpected server error occurred."), 500
+    return "An unexpected server error occurred.", 500
 
 
 @app.route("/")
@@ -572,12 +592,23 @@ def _ensure_first_admin():
 
 
 def _init_db_safely():
+    if not config.DB_AUTO_INIT:
+        app.logger.info(
+            "Automatic database initialization is disabled; using the existing schema."
+        )
+        return
+
     try:
         init_db()
         init_hr_tables()
         _ensure_first_admin()
     except mysql.connector.Error as err:
-        print(f"[warning] Could not prepare the database yet: {err}")
+        app.logger.error(
+            "Database initialization failed (errno=%s, sqlstate=%s).",
+            getattr(err, "errno", None),
+            getattr(err, "sqlstate", None),
+        )
+        app.logger.exception("Database initialization error")
 
 
 # Runs under `python main.py`, `flask run` and WSGI servers alike.
