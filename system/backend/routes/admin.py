@@ -442,6 +442,10 @@ def restore_admin_backup(filename):
             500,
         )
     return jsonify(
-        message="Database restored successfully.",
-        safety_backup=safety_backup_name,\n        message=("Database restored successfully." if safety_backup_name else\n                 "Database restored successfully. The missing schema was recreated; no safety backup was possible."),
+        message=(
+            "Database restored successfully."
+            if safety_backup_name
+            else "Database restored successfully. The missing schema was recreated; no safety backup was possible."
+        ),
+        safety_backup=safety_backup_name,
     )
