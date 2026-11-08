@@ -508,14 +508,14 @@ document.addEventListener("DOMContentLoaded", () => {
     // Block digits and symbols outside normal personal-name punctuation while typing/pasting.
     ["acc-first", "acc-middle", "acc-last", "emp-first", "emp-middle", "emp-last"].forEach((id) => {
         byId(id).addEventListener("input", (ev) => {
-            ev.target.value = ev.target.value.replace(/[^\\p{L}\\p{M}\\s.'-]/gu, "");
+            ev.target.value = ev.target.value.replace(/[^\p{L}\p{M}\s.'-]/gu, "");
         });
     });
 
     // Philippine mobile numbers: digits only, maximum 11 characters.
     ["acc-phone", "emp-phone"].forEach((id) => {
         byId(id).addEventListener("input", (ev) => {
-            ev.target.value = ev.target.value.replace(/\\D/g, "").slice(0, 11);
+            ev.target.value = ev.target.value.replace(/\D/g, "").slice(0, 11);
         });
     });
 
