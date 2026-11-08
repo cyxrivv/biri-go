@@ -34,13 +34,28 @@
   const mobile = () => mobileQuery.matches;
 
   /* ---------- network ---------- */
-  async function api(url, options = {}) {
-    const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', ...options });
-    if (res.status === 401) { window.location.href = '/'; return new Promise(() => {}); }
+async function api(url, options = {}) {
+    const token = document.querySelector('meta[name="csrf-token"]')?.content || "";
+
+    const res = await fetch(url, {
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': token,
+            ...(options.headers || {})
+        },
+        credentials: 'same-origin'
+    });
+
+    if (res.status === 401) {
+        window.location.href = '/';
+        return new Promise(() => {});
+    }
+
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
     return body;
-  }
+}
 
   let toastTimer;
   function toast(message, isError) {

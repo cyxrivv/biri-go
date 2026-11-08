@@ -4,10 +4,17 @@
 const state = { page: 1, perPage: 10, search: "", status: "" };
 
 async function api(url, options = {}) {
+    const token = document.querySelector('meta[name="csrf-token"]')?.content || "";
+
     const res = await fetch(url, {
-        headers: { "Content-Type": "application/json" },
         ...options,
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": token,
+            ...(options.headers || {})
+        }
     });
+
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || "Request failed (" + res.status + ")");
     return data;
@@ -49,6 +56,107 @@ async function loadDashboard() {
     } catch (err) {
         console.error(err);
         alert("Dashboard error: " + err.message);
+    }
+}
+
+// ---------------------------------------------------------------- Database backups
+function formatBackupSize(bytes) {
+    const size = Number(bytes) || 0;
+    if (size < 1024) return size + " B";
+    if (size < 1024 * 1024) return (size / 1024).toFixed(1) + " KB";
+    return (size / (1024 * 1024)).toFixed(2) + " MB";
+}
+
+async function loadBackups() {
+    const tbody = document.querySelector("#backups-table tbody");
+    const errorBox = byId("backup-error");
+    errorBox.hidden = true;
+    tbody.innerHTML = "";
+    try {
+        const data = await api("/api/admin/backups");
+        if (!data.items.length) {
+            emptyRow(tbody, 4, "No backups created yet.");
+            return;
+        }
+        data.items.forEach((backup) => {
+            const tr = document.createElement("tr");
+            [backup.filename, new Date(backup.created_at).toLocaleString(), formatBackupSize(backup.size)]
+                .forEach((value) => {
+                    const td = document.createElement("td");
+                    td.textContent = value;
+                    tr.appendChild(td);
+                });
+
+            const actions = document.createElement("td");
+            actions.className = "actions";
+
+            const restore = document.createElement("button");
+            restore.type = "button";
+            restore.className = "btn btn-secondary";
+            restore.textContent = "Restore";
+            restore.addEventListener("click", () => restoreBackup(backup.filename));
+
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.className = "btn btn-danger";
+            remove.textContent = "Delete";
+            remove.addEventListener("click", () => deleteBackup(backup.filename));
+
+            actions.append(restore, remove);
+            tr.appendChild(actions);
+            tbody.appendChild(tr);
+        });
+    } catch (err) {
+        errorBox.textContent = err.message;
+        errorBox.hidden = false;
+        emptyRow(tbody, 4, "Could not load backups.");
+    }
+}
+
+async function createBackup() {
+    const button = byId("backup-create");
+    button.disabled = true;
+    try {
+        const result = await api("/api/admin/backups", { method: "POST", body: "{}" });
+        toast(result.message || "Backup created.");
+        await loadBackups();
+    } catch (err) {
+        toast(err.message, "error");
+    } finally {
+        button.disabled = false;
+    }
+}
+
+async function deleteBackup(filename) {
+    if (!confirm("Permanently delete this backup?\\n\\n" + filename)) return;
+    try {
+        await api("/api/admin/backups/" + encodeURIComponent(filename), { method: "DELETE" });
+        toast("Backup deleted.");
+        await loadBackups();
+    } catch (err) {
+        toast(err.message, "error");
+    }
+}
+
+async function restoreBackup(filename) {
+    if (!confirm(
+        "Restore this backup? The current database will be replaced. " +
+        "A safety backup will be created first.\\n\\n" + filename
+    )) return;
+    const confirmation = prompt('Type RESTORE to continue:');
+    if (confirmation !== "RESTORE") {
+        toast("Restore cancelled.", "info");
+        return;
+    }
+    try {
+        const result = await api(
+            "/api/admin/backups/" + encodeURIComponent(filename) + "/restore",
+            { method: "POST", body: "{}" }
+        );
+        toast("Database restored. Safety backup: " + result.safety_backup);
+        await Promise.all([loadDashboard(), loadEmployees(), loadBackups()]);
+    } catch (err) {
+        toast(err.message, "error");
     }
 }
 
@@ -133,6 +241,7 @@ function showSection(section) {
     if (section === "salaries") loadSalaries();
     if (section === "leaves") loadLeaves();
     if (section === "reports") loadReports();
+    if (section === "backup") loadBackups();
     if (section === "setting") loadSettings();
 
     document.querySelector(".main-content").scrollTop = 0;
@@ -396,6 +505,23 @@ function closeEmployeeModal() {
 
 // ---------------------------------------------------------------- Wiring
 document.addEventListener("DOMContentLoaded", () => {
+    // Block digits and symbols outside normal personal-name punctuation while typing/pasting.
+    ["acc-first", "acc-middle", "acc-last", "emp-first", "emp-middle", "emp-last"].forEach((id) => {
+        byId(id).addEventListener("input", (ev) => {
+            ev.target.value = ev.target.value.replace(/[^\p{L}\p{M}\s.'-]/gu, "");
+        });
+    });
+
+    // Philippine mobile numbers: digits only, maximum 11 characters.
+    ["acc-phone", "emp-phone"].forEach((id) => {
+        byId(id).addEventListener("input", (ev) => {
+            ev.target.value = ev.target.value.replace(/\D/g, "").slice(0, 11);
+        });
+    });
+
+    byId("backup-refresh").addEventListener("click", loadBackups);
+    byId("backup-create").addEventListener("click", createBackup);
+
     // Add Account
     byId("add-account-btn").addEventListener("click", openAccountModal);
     byId("acc-department").addEventListener("change", () =>

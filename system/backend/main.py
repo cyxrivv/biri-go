@@ -1,11 +1,13 @@
 import re
-from datetime import date, datetime
+import hmac
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 import mysql.connector
 from flask import Flask, jsonify, render_template
 from flask import session, redirect
 from flask import request
+from werkzeug.exceptions import HTTPException
 import secrets
 import os
 import sys
@@ -37,9 +39,21 @@ app.json = AppJSONProvider(app)
 app.secret_key = config.SECRET_KEY
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="Lax",                      # browsers won't send it on cross-site POSTs
-    SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE") == "1",   # set when served over HTTPS
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=(
+        config.APP_ENV == "production"
+        or os.environ.get("COOKIE_SECURE") == "1"
+    ),
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
+    SESSION_REFRESH_EACH_REQUEST=False,
 )
+
+@app.context_processor
+def inject_csrf_token():
+    """Make a session-bound CSRF token available to every rendered page."""
+    if "csrf_token" not in session:
+        session["csrf_token"] = secrets.token_urlsafe(32)
+    return {"csrf_token": session["csrf_token"]}
 
 app.register_blueprint(employee_bp)
 app.register_blueprint(admin_bp)
@@ -51,19 +65,51 @@ ROLE_HOME = {"admin": "/admin", "hr": "/hr", "owner": "/owner", "employee": "/em
 
 @app.after_request
 def no_cache(resp):
-    """Stop the browser Back button from showing a portal page after logout."""
     if request.path in ROLE_HOME.values():
         resp.headers["Cache-Control"] = "no-store"
+
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    resp.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; "
+        "font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com data:; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "object-src 'none'; base-uri 'self'; "
+        "frame-ancestors 'self'; form-action 'self'"
+    )
+    resp.headers["X-Frame-Options"] = "SAMEORIGIN"
     return resp
 
 
 @app.before_request
 def require_json_for_writes():
-    """Cross-site forms can't send application/json, so this plus SameSite=Lax blocks CSRF."""
-    if request.method in ("POST", "PUT", "PATCH", "DELETE") and request.path.startswith("/api/") \
-            and not request.is_json:
+    if (
+        request.method in ("POST", "PUT", "PATCH", "DELETE")
+        and request.path.startswith("/api/")
+        and not request.is_json
+    ):
         return jsonify(error="Content-Type must be application/json."), 415
 
+@app.before_request
+def csrf_protect():
+    if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
+        return
+
+    token = (
+        request.headers.get("X-CSRF-Token")
+        or request.form.get("csrf_token")
+    )
+
+    session_token = session.get("csrf_token")
+
+    if not token or not session_token:
+        return jsonify(error="CSRF token missing."), 403
+
+    if not hmac.compare_digest(token, session_token):
+        return jsonify(error="Invalid CSRF token."), 403
 
 @app.errorhandler(ApiError)
 def handle_api_error(e):
@@ -73,6 +119,8 @@ def handle_api_error(e):
 @app.errorhandler(mysql.connector.Error)
 def handle_db_error(e):
     errno = getattr(e, "errno", None)
+    sqlstate = getattr(e, "sqlstate", None)
+
     if errno == 1062:
         return jsonify(error="That value already exists (duplicate entry)."), 409
     if errno == 1451:
@@ -81,20 +129,37 @@ def handle_db_error(e):
         ), 409
     if errno == 1452:
         return jsonify(error="A referenced record doesn't exist."), 400
+
     if errno in (1045, 1049, 2002, 2003, 2013):
-        app.logger.error("Database connection problem: %s", e)
+        app.logger.error(
+            "Database connection failed (errno=%s, sqlstate=%s).", errno, sqlstate
+        )
+        return jsonify(error="The database is temporarily unavailable."), 503
+
+    if errno in (1054, 1146):
+        app.logger.error(
+            "Database schema error (errno=%s, sqlstate=%s).", errno, sqlstate
+        )
         return jsonify(
-            error="Can't connect to the database. Check DB_HOST / DB_USER / "
-                  "DB_PASSWORD / DB_NAME in config.py and that MySQL is running."
-        ), 503
-    if errno == 1146:
-        app.logger.error("Missing table: %s", e)
-        return jsonify(error="Database table missing: " + str(getattr(e, "msg", e))), 500
-    if errno == 1054:
-        app.logger.error("Missing column: %s", e)
-        return jsonify(error="Database column missing: " + str(getattr(e, "msg", e))), 500
-    app.logger.exception("Database error")
-    return jsonify(error="Database error."), 500
+            error="The database schema is not ready. Contact the system administrator."
+        ), 500
+
+    app.logger.error(
+        "Database operation failed (errno=%s, sqlstate=%s).", errno, sqlstate
+    )
+    return jsonify(error="A database operation failed."), 500
+
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(e):
+    # Keep normal HTTP errors (404, 405, etc.) and their status codes intact.
+    if isinstance(e, HTTPException):
+        return e
+
+    app.logger.exception("Unhandled application error")
+    if request.path.startswith("/api/"):
+        return jsonify(error="An unexpected server error occurred."), 500
+    return "An unexpected server error occurred.", 500
 
 
 @app.route("/")
@@ -153,12 +218,15 @@ def api_login():
 
     _FAILED_LOGINS.pop(throttle_key, None)
     session.clear()
+    session["csrf_token"] = secrets.token_urlsafe(32)
+    session.permanent = True
     session["account_id"] = row["account_id"]
     session["role"] = row["role"]
     return jsonify(success=True, redirect=ROLE_HOME.get(row["role"], "/"))
 
 ACCOUNT_ROLES = ("admin", "hr", "owner", "employee")
 SEX_VALUES = ("Male", "Female")
+PERSON_NAME_RE = re.compile(r"^[^\W\d_]+(?:[ .'-][^\W\d_]+)*$", re.UNICODE)
 
 
 def _json_object():
@@ -179,12 +247,12 @@ def parse_employee_form(data, require_job=True):
     suffix, sex, phone = _text(data, "suffix"), _text(data, "sex"), _text(data, "phone")
     email = _text(data, "email").lower()
 
-    if not first or len(first) > 50:
-        raise ApiError("First name is required (max 50 characters).")
-    if len(middle) > 50:
-        raise ApiError("Middle name is too long (max 50 characters).")
-    if not last or len(last) > 50:
-        raise ApiError("Last name is required (max 50 characters).")
+    if not first or len(first) > 50 or not PERSON_NAME_RE.fullmatch(first):
+        raise ApiError("First name is required and must contain letters only (spaces, periods, apostrophes, and hyphens are allowed).")
+    if len(middle) > 50 or (middle and not PERSON_NAME_RE.fullmatch(middle)):
+        raise ApiError("Middle name must contain letters only (spaces, periods, apostrophes, and hyphens are allowed).")
+    if not last or len(last) > 50 or not PERSON_NAME_RE.fullmatch(last):
+        raise ApiError("Last name is required and must contain letters only (spaces, periods, apostrophes, and hyphens are allowed).")
     if not suffix:
         raise ApiError("Suffix is required. Enter 'None' if you don't have one.")
     if len(suffix) > 20:
@@ -203,8 +271,8 @@ def parse_employee_form(data, require_job=True):
 
     if not email or not EMAIL_RE.match(email) or len(email) > 100:
         raise ApiError("A valid email is required.")
-    if len(phone) > 20:
-        raise ApiError("Phone number is too long (max 20 characters).")
+    if phone and not re.fullmatch(r"09\d{9}", phone):
+        raise ApiError("Phone number must be an 11-digit Philippine mobile number starting with 09.")
 
     department_id = position_id = None
     if require_job:
@@ -505,7 +573,7 @@ def settings_password():
     return jsonify(message="Password updated.")
 
 
-@app.route("/logout")
+@app.route("/logout", methods=["POST"])
 def logout():
     session.clear()
     return redirect("/")
@@ -533,12 +601,23 @@ def _ensure_first_admin():
 
 
 def _init_db_safely():
+    if not config.DB_AUTO_INIT:
+        app.logger.info(
+            "Automatic database initialization is disabled; using the existing schema."
+        )
+        return
+
     try:
         init_db()
         init_hr_tables()
         _ensure_first_admin()
     except mysql.connector.Error as err:
-        print(f"[warning] Could not prepare the database yet: {err}")
+        app.logger.error(
+            "Database initialization failed (errno=%s, sqlstate=%s).",
+            getattr(err, "errno", None),
+            getattr(err, "sqlstate", None),
+        )
+        app.logger.exception("Database initialization error")
 
 
 # Runs under `python main.py`, `flask run` and WSGI servers alike.
