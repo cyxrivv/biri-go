@@ -35,3 +35,5 @@ if APP_ENV == "production":
         raise RuntimeError("Use a dedicated least-privilege database account in production.")
     if DB_AUTO_INIT:
         raise RuntimeError("DB_AUTO_INIT must be disabled in production.")
+    if os.environ.get("FLASK_DEBUG") == "1":
+        raise RuntimeError("FLASK_DEBUG must be disabled in production.")
