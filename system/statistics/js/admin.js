@@ -4,10 +4,17 @@
 const state = { page: 1, perPage: 10, search: "", status: "" };
 
 async function api(url, options = {}) {
+    const token = document.querySelector('meta[name="csrf-token"]')?.content || "";
+
     const res = await fetch(url, {
-        headers: { "Content-Type": "application/json" },
         ...options,
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": token,
+            ...(options.headers || {})
+        }
     });
+
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || "Request failed (" + res.status + ")");
     return data;

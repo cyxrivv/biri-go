@@ -37,38 +37,31 @@ const badge = s => `<span class="badge badge-${slug(s)}">${esc(s)}</span>`;
 
 
 async function api(url, options = {}) {
+    const token = document.querySelector('meta[name="csrf-token"]')?.content || "";
 
     const res = await fetch(url, {
-
-        headers: { "Content-Type": "application/json" },
-
-        credentials: "same-origin",
-         ...options,
-
+        ...options,
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": token,
+            ...(options.headers || {})
+        },
+        credentials: "same-origin"
     });
 
     if (res.status === 401) {
-
         window.location.href = "/";
-
         return new Promise(() => {});
-
     }
 
     const data = await res.json().catch(() => ({}));
-
     if (!res.ok) {
-
         const e = new Error(data.error || "Request failed (" + res.status + ")");
-
         e.status = res.status;
-
         throw e;
-
     }
 
     return data;
-
 }
 
 

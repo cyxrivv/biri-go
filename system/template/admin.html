@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1b4332">
     <meta name="robots" content="noindex, nofollow">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <title>Admin | Biri-Go</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <link rel="stylesheet" href="/statistics/css/admin.css">
@@ -47,7 +48,12 @@
                     </button>
                     <div class="menu" id="user-menu" hidden>
                         <button type="button" data-section="setting"><i class="fa-regular fa-id-card" aria-hidden="true"></i> My account</button>
-                        <a href="/logout"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> Sign out</a>
+                        <form method="POST" action="/logout" style="display: inline;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <button type="submit" style="background: none; border: none; cursor: pointer; color: inherit; font: inherit;">
+                                <i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> Sign out
+                            </button>
+                        </form>
                     </div>
                 </div>
             </div>

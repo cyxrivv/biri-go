@@ -145,7 +145,9 @@ async function sendLogin(code, password) {
     try {
         const res = await fetch(LOGIN_URL, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {'Content-Type': 'application/json',
+                      'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
+            },
             body: JSON.stringify({ employee_code: code, password }),
             signal: controller.signal,
         });

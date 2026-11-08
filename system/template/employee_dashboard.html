@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1b4332">
     <meta name="robots" content="noindex, nofollow">
+    <meta name="csrf-token" content="{{ csrf_token }}">
 
     <title>My dashboard | Biri_Go</title>
 
@@ -44,7 +45,12 @@
                 </button>
                 <div class="menu" id="user-menu" hidden>
                     <button type="button" data-page="profile"><i class="far fa-id-card" aria-hidden="true"></i> My profile</button>
-                    <a href="/logout"><i class="fas fa-right-from-bracket" aria-hidden="true"></i> Sign out</a>
+                    <form method="POST" action="/logout" style="display: inline;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" style="background: none; border: none; cursor: pointer; color: inherit; font: inherit;">
+                            <i class="fas fa-right-from-bracket" aria-hidden="true"></i> Sign out
+                        </button>
+                    </form>
                 </div>
             </div>
         </div>
