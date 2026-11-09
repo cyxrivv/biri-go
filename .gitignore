@@ -11,3 +11,8 @@ venv/
 # Local database backups contain private employee and payroll data.
 system/backend/backups/*
 !system/backend/backups/.gitkeep
+
+.env
+__pycache__/
+*.pyc
+uploads/

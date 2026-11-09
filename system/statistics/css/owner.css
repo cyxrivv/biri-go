@@ -1,0 +1,16 @@
+
+.menu form button { color: var(--danger-fg); }
+.menu form button i { color: var(--danger-fg); }
+.inline-field { display: flex; align-items: center; gap: 0.5rem; font-weight: 500; color: var(--text-soft); }
+textarea {
+    width: 100%; padding: 0.6rem 0.8rem; resize: vertical;
+    border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    background-color: var(--surface); color: var(--text); outline: none;
+}
+textarea:focus { border-color: var(--brand-600); box-shadow: var(--ring); }
+td .btn + .btn { margin-left: 0.3rem; }
+.news li { align-items: center; }
+.news li > div { flex: 1; }
+.news .btn { flex: none; }
+.name-cell small { display: block; color: var(--text-mute); font-size: 0.8rem; }
+.dashboard-cards .card p { font-size: 1.8rem; }
