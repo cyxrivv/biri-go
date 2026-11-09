@@ -34,28 +34,29 @@
   const mobile = () => mobileQuery.matches;
 
   /* ---------- network ---------- */
-async function api(url, options = {}) {
-    const token = document.querySelector('meta[name="csrf-token"]')?.content || "";
+  async function api(url, options = {}) {
+    const token = document.querySelector('meta[name="csrf-token"]')?.content || '';
 
+    const isForm = options.body instanceof FormData;
     const res = await fetch(url, {
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-Token': token,
-            ...(options.headers || {})
-        },
-        credentials: 'same-origin'
+      ...options,
+      headers: {
+        ...(isForm ? {} : { 'Content-Type': 'application/json' }),
+        'X-CSRF-Token': token,
+        ...(options.headers || {})
+      },
+      credentials: 'same-origin'
     });
 
     if (res.status === 401) {
-        window.location.href = '/';
-        return new Promise(() => {});
+      window.location.href = '/';
+      return new Promise(() => {});
     }
 
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
     return body;
-}
+  }
 
   let toastTimer;
   function toast(message, isError) {
@@ -235,6 +236,87 @@ async function api(url, options = {}) {
     finally { $('lv-submit').disabled = false; }
   }
 
+  /* ---------- documents ---------- */
+  const DOC_CATEGORIES = ['Government ID', 'Contract', 'Certificate', 'Medical', 'Other'];
+  const DOC_EXT = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'];
+  const DOC_MAX = 5 * 1024 * 1024;
+  let docs = [];
+  const fmtSize = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
+  const docIcon = (name) => {
+    const ext = String(name).split('.').pop().toLowerCase();
+    return ext === 'pdf' ? 'fa-file-pdf' : ext === 'doc' || ext === 'docx' ? 'fa-file-word' : 'fa-file-image';
+  };
+
+  function renderDocuments() {
+    const cat = $('doc-filter').value;
+    const q = $('doc-search').value.trim().toLowerCase();
+    const list = docs.filter((d) => (!cat || d.category === cat)
+      && (!q || d.title.toLowerCase().includes(q) || d.original_name.toLowerCase().includes(q)));
+    $('doc-count').textContent = `${docs.length} document${docs.length === 1 ? '' : 's'} on record`;
+    $('doc-rows').innerHTML = list.length ? list.map((d) =>
+      `<tr>
+        <td><i class="far ${docIcon(d.original_name)}" aria-hidden="true"></i> <strong>${esc(d.title)}</strong><br><small class="muted">${esc(d.original_name)}</small></td>
+        <td><span class="badge b-blue">${esc(d.category)}</span></td>
+        <td>${fmtSize(d.size_bytes)}</td>
+        <td>${fmtDate(d.uploaded_at)}</td>
+        <td>
+          <a class="btn btn-secondary btn-ghost btn-sm" href="/employee/documents/${d.id}/view" target="_blank" rel="noopener" aria-label="View ${esc(d.title)}"><i class="far fa-eye" aria-hidden="true"></i></a>
+          <a class="btn btn-secondary btn-ghost btn-sm" href="/employee/documents/${d.id}/download" aria-label="Download ${esc(d.title)}"><i class="fas fa-download" aria-hidden="true"></i></a>
+          <button class="btn btn-danger btn-sm" type="button" data-del-doc="${d.id}" aria-label="Delete ${esc(d.title)}"><i class="far fa-trash-can" aria-hidden="true"></i></button>
+        </td>
+      </tr>`).join('')
+      : emptyRow(5, docs.length ? 'No documents match your search.' : 'No documents uploaded yet.');
+  }
+
+  async function loadDocuments() {
+    try {
+      docs = (await api('/api/employee/documents')).documents || [];
+      renderDocuments();
+    } catch (err) {
+      $('doc-rows').innerHTML = emptyRow(5, err.message);
+    }
+  }
+
+  function openDocDialog() {
+    $('doc-form').reset();
+    $('doc-error').hidden = true;
+    $('doc-dialog').showModal();
+  }
+
+  async function submitDoc(ev) {
+    ev.preventDefault();
+    const err = $('doc-error');
+    err.hidden = true;
+    const file = $('doc-file').files[0];
+    const fail = (m) => { err.textContent = m; err.hidden = false; };
+    if (!file) return fail('Please choose a file.');
+    if (!DOC_EXT.includes(file.name.split('.').pop().toLowerCase())) return fail('Only PDF, Word, JPG or PNG files are allowed.');
+    if (file.size > DOC_MAX) return fail('The file is too large (maximum 5 MB).');
+
+    const form = new FormData();
+    form.append('title', $('doc-title').value.trim());
+    form.append('category', $('doc-category').value);
+    form.append('file', file);
+    $('doc-submit').disabled = true;
+    try {
+      await api('/api/employee/documents', { method: 'POST', body: form });
+      $('doc-dialog').close();
+      toast('Document uploaded.');
+      await loadDocuments();
+    } catch (e) { fail(e.message); }
+    finally { $('doc-submit').disabled = false; }
+  }
+
+  async function deleteDoc(id) {
+    const d = docs.find((x) => String(x.id) === String(id));
+    if (!d || !confirm(`Delete "${d.title}"? This cannot be undone.`)) return;
+    try {
+      await api(`/api/employee/documents/${id}`, { method: 'DELETE' });
+      toast('Document deleted.');
+      await loadDocuments();
+    } catch (e) { toast(e.message, true); }
+  }
+
   /* ---------- navigation ---------- */
   function scrollTop() {
     // On desktop the page scrolls inside .main-content; on small screens it scrolls the window.
@@ -243,6 +325,7 @@ async function api(url, options = {}) {
   }
 
   function showPage(name) {
+    if (!$(`page-${name}`)) name = 'dashboard';
     document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p.id === `page-${name}`));
     document.querySelectorAll('#sidebar li').forEach((li) => {
       const on = li.dataset.page === name;
@@ -250,6 +333,9 @@ async function api(url, options = {}) {
       if (on) li.setAttribute('aria-current', 'page'); else li.removeAttribute('aria-current');
     });
     scrollTop();
+    if (name === 'documents') loadDocuments();
+    // Keep the current page on refresh / browser back
+    if (location.hash !== `#${name}`) history.replaceState(null, '', `#${name}`);
     if (mobile()) setNav(false);
   }
 
@@ -287,29 +373,44 @@ async function api(url, options = {}) {
       setUserMenu(false);
     });
 
+    // Sidebar: each item opens its own page
     document.querySelectorAll('#sidebar li').forEach((li) => {
       const go = () => {
         if (li.dataset.page) return showPage(li.dataset.page);
-        if (li.dataset.scroll) {
-          showPage('dashboard');
-          return $(li.dataset.scroll).scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
         if (li.dataset.soon) toast(`${li.dataset.soon} is coming soon.`);
       };
       li.addEventListener('click', go);
       li.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
     });
 
+    // Browser back / forward and manual hash changes
+    window.addEventListener('hashchange', () => showPage(location.hash.slice(1) || 'dashboard'));
+
     document.querySelectorAll('[data-action="help"]').forEach((b) =>
       b.addEventListener('click', () => toast('Need help? Contact your HR team.')));
-    $('bell').addEventListener('click', () => { showPage('dashboard'); $('card-news').scrollIntoView({ behavior: 'smooth' }); });
+    $('bell').addEventListener('click', () => showPage('news'));
 
     $('att-btn').addEventListener('click', toggleAttendance);
-    $('open-leave').addEventListener('click', openLeave);
+    document.querySelectorAll('[data-action="open-leave"]').forEach((b) => b.addEventListener('click', openLeave));
     $('lv-cancel').addEventListener('click', () => $('leave-dialog').close());
     $('leave-dialog').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); }); // backdrop click
     $('leave-form').addEventListener('submit', submitLeave);
     $('lv-start').addEventListener('change', () => { if ($('lv-end').value < $('lv-start').value) $('lv-end').value = $('lv-start').value; });
+
+    // Documents
+    const catOptions = DOC_CATEGORIES.map((c) => `<option>${esc(c)}</option>`).join('');
+    $('doc-category').innerHTML = catOptions;
+    $('doc-filter').innerHTML = `<option value="">All categories</option>${catOptions}`;
+    $('doc-filter').addEventListener('change', renderDocuments);
+    $('doc-search').addEventListener('input', renderDocuments);
+    $('open-doc').addEventListener('click', openDocDialog);
+    $('doc-cancel').addEventListener('click', () => $('doc-dialog').close());
+    $('doc-dialog').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+    $('doc-form').addEventListener('submit', submitDoc);
+    $('doc-rows').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-del-doc]');
+      if (b) deleteDoc(b.dataset.delDoc);
+    });
 
     if (mobile()) setNav(false);
     setInterval(() => { if (data && !document.hidden) renderAttendanceCard(); }, 30000);   // keeps "hours worked today" ticking
@@ -319,10 +420,14 @@ async function api(url, options = {}) {
   document.addEventListener('DOMContentLoaded', async () => {
     $('today-date').textContent = new Date().toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
     bind();
+    // Open the page named in the URL hash (e.g. #leaves), if any
+    const start = location.hash.slice(1);
+    if (start && $(`page-${start}`)) showPage(start);
     try {
       me = await api('/api/employee/me');
       renderProfile();
       await loadSummary();
+      loadDocuments();
     } catch (err) {
       pageError(err.message);
     }

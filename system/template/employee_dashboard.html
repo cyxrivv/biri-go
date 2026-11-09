@@ -64,11 +64,11 @@
                 <ul>
                     <li class="active" data-page="dashboard" tabindex="0" role="button"><i class="fas fa-gauge" aria-hidden="true"></i> Dashboard</li>
                     <li data-page="profile" tabindex="0" role="button"><i class="far fa-id-card" aria-hidden="true"></i> My profile</li>
-                    <li data-scroll="card-attendance" tabindex="0" role="button"><i class="far fa-clock" aria-hidden="true"></i> My attendance</li>
-                    <li data-scroll="card-leaves" tabindex="0" role="button"><i class="far fa-calendar-check" aria-hidden="true"></i> Leave &amp; requests</li>
-                    <li data-scroll="card-pay" tabindex="0" role="button"><i class="fas fa-wallet" aria-hidden="true"></i> Salary &amp; payslips</li>
-                    <li data-soon="My documents" tabindex="0" role="button"><i class="far fa-folder-open" aria-hidden="true"></i> My documents</li>
-                    <li data-scroll="card-news" tabindex="0" role="button"><i class="fas fa-bullhorn" aria-hidden="true"></i> Announcements</li>
+                    <li data-page="attendance" tabindex="0" role="button"><i class="far fa-clock" aria-hidden="true"></i> My attendance</li>
+                    <li data-page="leaves" tabindex="0" role="button"><i class="far fa-calendar-check" aria-hidden="true"></i> Leave &amp; requests</li>
+                    <li data-page="pay" tabindex="0" role="button"><i class="fas fa-wallet" aria-hidden="true"></i> Salary &amp; payslips</li>
+                    <li data-page="documents" tabindex="0" role="button"><i class="far fa-folder-open" aria-hidden="true"></i> My documents</li>
+                    <li data-page="news" tabindex="0" role="button"><i class="fas fa-bullhorn" aria-hidden="true"></i> Announcements</li>
                 </ul>
             </nav>
 
@@ -86,7 +86,7 @@
 
             <div id="page-error" class="form-error" role="alert" hidden></div>
 
-            <!-- Dashboard -->
+            <!-- ============ Dashboard (overview) ============ -->
             <section id="page-dashboard" class="page active" aria-labelledby="dash-title">
 
                 <div class="section-header page-head">
@@ -96,7 +96,7 @@
                     </div>
                     <div class="section-actions head-actions">
                         <span class="muted" id="today-date"></span>
-                        <button class="btn btn-primary" type="button" id="open-leave">
+                        <button class="btn btn-primary" type="button" data-action="open-leave">
                             <i class="fas fa-plus" aria-hidden="true"></i> Request leave
                         </button>
                     </div>
@@ -162,7 +162,7 @@
                     </article>
 
                     <article class="panel" id="card-pay">
-                        <div class="panel-head"><h3>Salary &amp; payslips</h3></div>
+                        <div class="panel-head"><h3>Latest payslip</h3></div>
                         <div id="pay-body">
                             <p class="muted small" id="pay-period">—</p>
                             <p class="muted small">Net salary</p>
@@ -176,51 +176,13 @@
                     </article>
                 </div>
 
-                <div class="grid-2">
-                    <article class="panel" id="card-leaves">
-                        <div class="panel-head"><h3>My leave requests</h3></div>
-                        <div class="table-container table-wrap">
-                            <table>
-                                <thead><tr><th scope="col">Leave type</th><th scope="col">Leave dates</th><th scope="col">Duration</th><th scope="col">Status</th></tr></thead>
-                                <tbody id="leave-rows"></tbody>
-                            </table>
-                        </div>
-                    </article>
-
-                    <article class="panel" id="card-news">
-                        <div class="panel-head"><h3>Announcements</h3></div>
-                        <ul class="news" id="news-list"></ul>
-                    </article>
-                </div>
-
-                <div class="grid-2 single">
-                    <article class="panel">
-                        <div class="panel-head"><h3>Recent attendance</h3></div>
-                        <div class="table-container table-wrap">
-                            <table>
-                                <thead><tr><th scope="col">Date</th><th scope="col">Time in</th><th scope="col">Time out</th></tr></thead>
-                                <tbody id="attendance-rows"></tbody>
-                            </table>
-                        </div>
-                    </article>
-                    <article class="panel">
-                        <div class="panel-head"><h3>Payslip history</h3></div>
-                        <div class="table-container table-wrap">
-                            <table>
-                                <thead><tr><th scope="col">Period</th><th scope="col">Gross</th><th scope="col">Deductions</th><th scope="col">Net pay</th></tr></thead>
-                                <tbody id="payslip-rows"></tbody>
-                            </table>
-                        </div>
-                    </article>
-                </div>
-
                 <article class="panel recent-activity">
                     <div class="panel-head"><h3>Recent activity</h3></div>
                     <ul class="activity" id="activity-list"></ul>
                 </article>
             </section>
 
-            <!-- Profile -->
+            <!-- ============ My profile ============ -->
             <section id="page-profile" class="page" aria-labelledby="profile-title">
                 <div class="section-header page-head">
                     <div>
@@ -240,6 +202,112 @@
                     <table><tbody id="profile-rows"></tbody></table>
                 </div>
                 <p class="muted profile-note">To change your details, contact HR or an administrator.</p>
+            </section>
+
+            <!-- ============ My attendance ============ -->
+            <section id="page-attendance" class="page" aria-labelledby="attendance-title">
+                <div class="section-header page-head">
+                    <div>
+                        <h2 id="attendance-title">My attendance</h2>
+                        <p class="muted">Your recent clock in and clock out records</p>
+                    </div>
+                </div>
+                <article class="panel">
+                    <div class="panel-head"><h3>Recent attendance</h3></div>
+                    <div class="table-container table-wrap">
+                        <table>
+                            <thead><tr><th scope="col">Date</th><th scope="col">Time in</th><th scope="col">Time out</th></tr></thead>
+                            <tbody id="attendance-rows"></tbody>
+                        </table>
+                    </div>
+                </article>
+            </section>
+
+            <!-- ============ Leave & requests ============ -->
+            <section id="page-leaves" class="page" aria-labelledby="leaves-title">
+                <div class="section-header page-head">
+                    <div>
+                        <h2 id="leaves-title">Leave &amp; requests</h2>
+                        <p class="muted">Track your leave requests and their status</p>
+                    </div>
+                    <div class="section-actions head-actions">
+                        <button class="btn btn-primary" type="button" data-action="open-leave">
+                            <i class="fas fa-plus" aria-hidden="true"></i> Request leave
+                        </button>
+                    </div>
+                </div>
+                <article class="panel" id="card-leaves">
+                    <div class="panel-head"><h3>My leave requests</h3></div>
+                    <div class="table-container table-wrap">
+                        <table>
+                            <thead><tr><th scope="col">Leave type</th><th scope="col">Leave dates</th><th scope="col">Duration</th><th scope="col">Status</th></tr></thead>
+                            <tbody id="leave-rows"></tbody>
+                        </table>
+                    </div>
+                </article>
+            </section>
+
+            <!-- ============ Salary & payslips ============ -->
+            <section id="page-pay" class="page" aria-labelledby="pay-title">
+                <div class="section-header page-head">
+                    <div>
+                        <h2 id="pay-title">Salary &amp; payslips</h2>
+                        <p class="muted">Your payslip history</p>
+                    </div>
+                </div>
+                <article class="panel">
+                    <div class="panel-head"><h3>Payslip history</h3></div>
+                    <div class="table-container table-wrap">
+                        <table>
+                            <thead><tr><th scope="col">Period</th><th scope="col">Gross</th><th scope="col">Deductions</th><th scope="col">Net pay</th></tr></thead>
+                            <tbody id="payslip-rows"></tbody>
+                        </table>
+                    </div>
+                </article>
+            </section>
+
+            <!-- ============ My documents ============ -->
+            <section id="page-documents" class="page" aria-labelledby="documents-title">
+                <div class="section-header page-head">
+                    <div>
+                        <h2 id="documents-title">My documents</h2>
+                        <p class="muted" id="doc-count">Upload and manage your files</p>
+                    </div>
+                    <div class="section-actions head-actions">
+                        <button class="btn btn-primary" type="button" id="open-doc">
+                            <i class="fas fa-upload" aria-hidden="true"></i> Upload document
+                        </button>
+                    </div>
+                </div>
+                <article class="panel">
+                    <div class="panel-head">
+                        <h3>Files on record</h3>
+                        <div class="section-actions">
+                            <input type="text" id="doc-search" placeholder="Search documents" aria-label="Search documents">
+                            <select id="doc-filter" aria-label="Filter by category"></select>
+                        </div>
+                    </div>
+                    <div class="table-container table-wrap">
+                        <table>
+                            <thead><tr><th scope="col">Document</th><th scope="col">Category</th><th scope="col">Size</th><th scope="col">Uploaded</th><th scope="col">Actions</th></tr></thead>
+                            <tbody id="doc-rows"></tbody>
+                        </table>
+                    </div>
+                </article>
+            </section>
+
+            <!-- ============ Announcements ============ -->
+            <section id="page-news" class="page" aria-labelledby="news-title">
+                <div class="section-header page-head">
+                    <div>
+                        <h2 id="news-title">Announcements</h2>
+                        <p class="muted">News and updates from your company</p>
+                    </div>
+                </div>
+                <article class="panel" id="card-news">
+                    <div class="panel-head"><h3>Latest announcements</h3></div>
+                    <ul class="news" id="news-list"></ul>
+                </article>
             </section>
 
         </main>
@@ -265,6 +333,26 @@
         <div class="modal-actions btn-row end">
             <button class="btn btn-primary" type="submit" id="lv-submit">Send request</button>
             <button class="btn btn-secondary btn-ghost" type="button" id="lv-cancel">Cancel</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- Upload document -->
+<dialog id="doc-dialog" class="modal-box modal-sm" aria-labelledby="doc-dialog-title">
+    <form id="doc-form">
+        <div class="modal-head">
+            <h3 id="doc-dialog-title">Upload document</h3>
+        </div>
+        <div class="form-grid single">
+            <label for="doc-title">Title <input type="text" id="doc-title" maxlength="150" placeholder="e.g. NBI Clearance" required></label>
+            <label for="doc-category">Category <select id="doc-category" required></select></label>
+            <label for="doc-file">File <input type="file" id="doc-file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" required></label>
+        </div>
+        <p class="muted small">PDF, Word, JPG or PNG. Maximum 5 MB.</p>
+        <p class="form-error" id="doc-error" role="alert" hidden></p>
+        <div class="modal-actions btn-row end">
+            <button class="btn btn-primary" type="submit" id="doc-submit">Upload</button>
+            <button class="btn btn-secondary btn-ghost" type="button" id="doc-cancel">Cancel</button>
         </div>
     </form>
 </dialog>
