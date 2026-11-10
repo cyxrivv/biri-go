@@ -246,7 +246,7 @@ def _text(data, key):
     return value.strip() if isinstance(value, str) else ""
 
 
-def parse_employee_form(data, require_job=True):
+def parse_employee_form(data, require_job=True, require_adult=False):
     """Validate the personal/job fields shared by Add Account and Edit Employee."""
     first, middle, last = _text(data, "first_name"), _text(data, "middle_name"), _text(data, "last_name")
     suffix, sex, phone = _text(data, "suffix"), _text(data, "sex"), _text(data, "phone")
@@ -279,7 +279,7 @@ def parse_employee_form(data, require_job=True):
         minimum_birthday = today.replace(year=today.year - 18, day=28)
     if birthday > today or birthday.year < 1900:
         raise ApiError("Birthday is out of range.")
-    if birthday > minimum_birthday:
+    if require_adult and birthday > minimum_birthday:
         raise ApiError("Employee must be at least 18 years old.")
 
     if not email or not EMAIL_RE.match(email) or len(email) > 100:
@@ -357,7 +357,7 @@ def create_account():
     """Create an employee record and its login account in one transaction."""
     data = _json_object()
     role = _text(data, "role").lower()
-    emp = parse_employee_form(data, require_job=(role not in NO_JOB_ROLES))
+    emp = parse_employee_form(data, require_job=(role not in NO_JOB_ROLES), require_adult=True)
     password = data.get("password") or ""
 
     if role not in ACCOUNT_ROLES:
