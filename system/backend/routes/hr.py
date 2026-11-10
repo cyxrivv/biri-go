@@ -585,6 +585,8 @@ def list_payroll():
                 p.deductions,
                 p.net_pay,
                 p.payment_status,
+                p.hr_confirmed_at,
+                p.employee_confirmed_at,
                 p.created_at
             FROM payroll p
             JOIN employees e ON e.employee_id = p.employee_id
@@ -594,6 +596,35 @@ def list_payroll():
         rows = [_clean(row) for row in cur.fetchall()]
 
     return jsonify(rows)
+
+
+@hr_bp.route("/payroll/<int:payroll_id>/confirm-payment", methods=["PUT"])
+@role_required("hr")
+def confirm_payroll_payment(payroll_id):
+    """Record that HR has paid this employee's payroll."""
+    with db() as (conn, cur):
+        cur.execute(
+            "SELECT employee_id, hr_confirmed_at FROM payroll WHERE payroll_id = %s",
+            (payroll_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise ApiError("Payroll record not found.", 404)
+        if row.get("hr_confirmed_at") is not None:
+            return jsonify(message="Payment was already confirmed by HR.")
+
+        cur.execute(
+            "UPDATE payroll SET payment_status = 'Paid', "
+            "hr_confirmed_at = CURRENT_TIMESTAMP WHERE payroll_id = %s",
+            (payroll_id,),
+        )
+        log_activity(
+            cur,
+            "HR confirmed payment for payroll #%s (employee #%s)" %
+            (payroll_id, row["employee_id"]),
+        )
+
+    return jsonify(message="Payment confirmed. The employee can now acknowledge receipt.")
 
 @hr_bp.route("/payroll", methods=["POST"])
 @role_required("hr")

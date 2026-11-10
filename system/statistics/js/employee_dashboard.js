@@ -3,7 +3,7 @@
  *   GET  /api/employee/summary                 everything shown on the dashboard
  *   POST /api/employee/attendance/check-in     |  .../check-out
  *   POST /api/employee/leaves                  { type, start_date, end_date }
- *   GET  /employee/payslips/<id>[?download=1]  printable payslip
+ *   GET  /employee/payslips/<id>[?download=1]  PDF payslip
  */
 (() => {
   'use strict';
@@ -150,6 +150,15 @@
     if (!p) return;
     $('pay-period').textContent = fmtPeriod(p.pay_period);
     $('pay-net').textContent = peso(p.net_pay);
+    const unlocked = !!p.hr_confirmed && !!p.employee_confirmed;
+    $('pay-confirmation').textContent = !p.hr_confirmed
+      ? 'Waiting for HR to confirm that payment has been made.'
+      : !p.employee_confirmed
+        ? 'HR confirmed payment. Please acknowledge receipt to unlock your official payslip.'
+        : 'Payment and receipt are confirmed. Your official payslip is available.';
+    $('pay-confirm').hidden = !p.hr_confirmed || !!p.employee_confirmed;
+    $('pay-download').hidden = !unlocked;
+    $('pay-view').hidden = !unlocked;
     $('pay-download').href = `/employee/payslips/${p.id}?download=1`;
     $('pay-view').href = `/employee/payslips/${p.id}`;
   }
@@ -165,9 +174,16 @@
       `<tr><td>${fmtDate(a.work_date)}</td><td>${esc(a.time_in || '-')}</td><td>${esc(a.time_out || '-')}</td></tr>`).join('')
       : emptyRow(3, 'No attendance records yet.');
 
-    $('payslip-rows').innerHTML = data.payslips.length ? data.payslips.map((p) =>
-      `<tr><td><a href="/employee/payslips/${p.id}" target="_blank" rel="noopener">${fmtPeriod(p.pay_period)}</a></td><td>${peso(p.gross_pay)}</td><td>${peso(p.deductions)}</td><td>${peso(p.net_pay)}</td></tr>`).join('')
-      : emptyRow(4, 'No payslips yet.');
+    $('payslip-rows').innerHTML = data.payslips.length ? data.payslips.map((p) => {
+      const unlocked = !!p.hr_confirmed && !!p.employee_confirmed;
+      const status = !p.hr_confirmed ? 'Waiting for HR' : !p.employee_confirmed ? 'Awaiting your confirmation' : 'Confirmed';
+      const action = unlocked
+        ? `<a href="/employee/payslips/${p.id}" target="_blank" rel="noopener">View</a> · <a href="/employee/payslips/${p.id}?download=1" download>Download</a>`
+        : p.hr_confirmed
+          ? `<button class="btn btn-primary btn-sm" type="button" data-confirm-payslip="${p.id}">Confirm receipt</button>`
+          : '<span class="muted">Not available yet</span>';
+      return `<tr><td>${fmtPeriod(p.pay_period)}</td><td>${peso(p.gross_pay)}</td><td>${peso(p.deductions)}</td><td>${peso(p.net_pay)}</td><td>${badge(status)}</td><td>${action}</td></tr>`;
+    }).join('') : emptyRow(6, 'No payslips yet.');
   }
 
   function renderNews() {
@@ -419,6 +435,29 @@
     $('doc-cancel').addEventListener('click', () => $('doc-dialog').close());
     $('doc-dialog').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
     $('doc-form').addEventListener('submit', submitDoc);
+    $('pay-confirm').addEventListener('click', async () => {
+      const p = data && data.payslips[0];
+      if (!p || !p.hr_confirmed || p.employee_confirmed) return;
+      $('pay-confirm').disabled = true;
+      try {
+        const result = await api(`/api/employee/payslips/${p.id}/confirm`, { method: 'POST', body: '{}' });
+        toast(result.message || 'Receipt confirmed.');
+        await loadSummary();
+      } catch (err) { toast(err.message, true); }
+      finally { $('pay-confirm').disabled = false; }
+    });
+
+    $('payslip-rows').addEventListener('click', async (e) => {
+      const button = e.target.closest('[data-confirm-payslip]');
+      if (!button) return;
+      button.disabled = true;
+      try {
+        const result = await api(`/api/employee/payslips/${button.dataset.confirmPayslip}/confirm`, { method: 'POST', body: '{}' });
+        toast(result.message || 'Receipt confirmed.');
+        await loadSummary();
+      } catch (err) { toast(err.message, true); }
+      finally { button.disabled = false; }
+    });
     $('doc-rows').addEventListener('click', (e) => {
       const b = e.target.closest('[data-del-doc]');
       if (b) deleteDoc(b.dataset.delDoc);

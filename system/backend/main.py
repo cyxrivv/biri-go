@@ -246,7 +246,7 @@ def _text(data, key):
     return value.strip() if isinstance(value, str) else ""
 
 
-def parse_employee_form(data, require_job=True):
+def parse_employee_form(data, require_job=True, require_adult=False):
     """Validate the personal/job fields shared by Add Account and Edit Employee."""
     first, middle, last = _text(data, "first_name"), _text(data, "middle_name"), _text(data, "last_name")
     suffix, sex, phone = _text(data, "suffix"), _text(data, "sex"), _text(data, "phone")
@@ -271,8 +271,16 @@ def parse_employee_form(data, require_job=True):
         birthday = datetime.strptime(_text(data, "birthday"), "%Y-%m-%d").date()
     except ValueError:
         raise ApiError("Birthday must be a valid date.")
-    if birthday > date.today() or birthday.year < 1900:
+    today = date.today()
+    try:
+        minimum_birthday = today.replace(year=today.year - 18)
+    except ValueError:
+        # Handle February 29 birthdays when the cutoff year is not a leap year.
+        minimum_birthday = today.replace(year=today.year - 18, day=28)
+    if birthday > today or birthday.year < 1900:
         raise ApiError("Birthday is out of range.")
+    if require_adult and birthday > minimum_birthday:
+        raise ApiError("Employee must be at least 18 years old.")
 
     if not email or not EMAIL_RE.match(email) or len(email) > 100:
         raise ApiError("A valid email is required.")
@@ -349,7 +357,7 @@ def create_account():
     """Create an employee record and its login account in one transaction."""
     data = _json_object()
     role = _text(data, "role").lower()
-    emp = parse_employee_form(data, require_job=(role not in NO_JOB_ROLES))
+    emp = parse_employee_form(data, require_job=(role not in NO_JOB_ROLES), require_adult=True)
     password = data.get("password") or ""
 
     if role not in ACCOUNT_ROLES:
@@ -364,6 +372,21 @@ def create_account():
         cur.execute("SELECT 1 AS ok FROM employees WHERE email = %s", (emp["email"],))
         if cur.fetchone():
             raise ApiError("An employee with that email already exists.", 409)
+        if role == "hr":
+            hr_department_name = "Human Resources & Admin"
+            cur.execute(
+                "SELECT department_id FROM departments "
+                "WHERE LOWER(TRIM(dept_name)) = LOWER(%s)",
+                (hr_department_name,),
+            )
+            hr_department = cur.fetchone()
+            if not hr_department:
+                raise ApiError(
+                    "The Human Resources & Admin department must exist before creating an HR account."
+                )
+            if emp["department_id"] != hr_department["department_id"]:
+                raise ApiError("HR accounts must belong to the Human Resources & Admin department.")
+
         if emp["department_id"] is not None:
             check_position(cur, emp["department_id"], emp["position_id"])
 

@@ -17,7 +17,7 @@ statistics/css|js/          static files, served at /statistics
 
 ## Run
 ```bash
-pip install flask mysql-connector-python
+pip install -r requirements.txt
 mysql -u root -p < Biri-Go.sql
 
 # set these in your shell (never commit them)
