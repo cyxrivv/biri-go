@@ -125,7 +125,9 @@ def employee_summary():
         (emp_id,),
     )
     payslips = fetch_all(
-        "SELECT payroll_id AS id, pay_period, gross_pay, deductions, net_pay FROM payroll "
+        "SELECT payroll_id AS id, pay_period, gross_pay, deductions, net_pay, "
+        "payment_status, (hr_confirmed_at IS NOT NULL) AS hr_confirmed, "
+        "(employee_confirmed_at IS NOT NULL) AS employee_confirmed FROM payroll "
         "WHERE employee_id = %s ORDER BY pay_period DESC, payroll_id DESC LIMIT 6",
         (emp_id,),
     )
@@ -291,18 +293,54 @@ def request_leave():
     return jsonify(message="Leave request sent."), 201
 
 
+
+@employee_bp.post("/api/employee/payslips/<int:payroll_id>/confirm")
+@role_required("employee")
+def confirm_payslip_receipt(payroll_id):
+    """Let an employee acknowledge receipt after HR has confirmed payment."""
+    employee_id = _current_employee_id()
+    with db() as (conn, cur):
+        cur.execute(
+            "SELECT hr_confirmed_at, employee_confirmed_at FROM payroll "
+            "WHERE payroll_id = %s AND employee_id = %s",
+            (payroll_id, employee_id),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise ApiError("Payroll record not found.", 404)
+        if row.get("hr_confirmed_at") is None:
+            raise ApiError("HR must confirm payment before you can acknowledge receipt.", 409)
+        if row.get("employee_confirmed_at") is not None:
+            return jsonify(message="You have already confirmed receipt.")
+
+        cur.execute(
+            "UPDATE payroll SET employee_confirmed_at = CURRENT_TIMESTAMP "
+            "WHERE payroll_id = %s AND employee_id = %s AND employee_confirmed_at IS NULL",
+            (payroll_id, employee_id),
+        )
+        log_activity(cur, "Employee #%s confirmed receipt of payroll #%s" % (employee_id, payroll_id))
+
+    return jsonify(message="Receipt confirmed. Your official payslip is now available.")
+
 def render_payslip(payroll_id, employee_id):
     """Printable payslip for ONE employee's own payroll row. ?download=1 saves it as a file."""
     row = fetch_one(
-        "SELECT pay_period, gross_pay, deductions, net_pay FROM payroll "
+        "SELECT pay_period, monthly_salary, overtime_pay, absence_deduction, "
+        "unpaid_leave_deduction, allowances, manual_deductions, gross_pay, deductions, net_pay, "
+        "hr_confirmed_at, employee_confirmed_at FROM payroll "
         "WHERE payroll_id = %s AND employee_id = %s",
         (payroll_id, employee_id),
     )
     if not row:
         raise ApiError("Payslip not found.", 404)
+    if row.get("hr_confirmed_at") is None or row.get("employee_confirmed_at") is None:
+        raise ApiError("The official payslip is available after HR confirms payment and you acknowledge receipt.", 403)
     lines = "".join(
         f"<tr><th>{label}</th><td>&#8369;{float(row[key]):,.2f}</td></tr>"
-        for label, key in (("Gross pay", "gross_pay"), ("Deductions", "deductions"), ("Net pay", "net_pay"))
+        for label, key in (("Monthly salary", "monthly_salary"), ("Overtime pay", "overtime_pay"),
+                           ("Absence deduction", "absence_deduction"), ("Unpaid leave deduction", "unpaid_leave_deduction"),
+                           ("Allowances", "allowances"), ("Manual deductions", "manual_deductions"),
+                           ("Gross pay", "gross_pay"), ("Total deductions", "deductions"), ("Net pay", "net_pay"))
     )
     period = escape(row["pay_period"].strftime("%B %Y") if hasattr(row["pay_period"], "strftime") else str(row["pay_period"]))
     page = (
