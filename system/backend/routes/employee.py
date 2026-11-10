@@ -1,10 +1,16 @@
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
-
-from html import escape
+from io import BytesIO
+from xml.sax.saxutils import escape
 
 import mysql.connector
-from flask import Blueprint, Response, jsonify, render_template, request, session
+from flask import Blueprint, jsonify, render_template, request, session, send_file
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import mm
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from auth import role_required
 from db import db, fetch_all, fetch_one, log_activity
@@ -323,37 +329,192 @@ def confirm_payslip_receipt(payroll_id):
     return jsonify(message="Receipt confirmed. Your official payslip is now available.")
 
 def render_payslip(payroll_id, employee_id):
-    """Printable payslip for ONE employee's own payroll row. ?download=1 saves it as a file."""
+    """Create a PDF payslip for the logged-in employee's own confirmed payroll row."""
     row = fetch_one(
-        "SELECT pay_period, monthly_salary, overtime_pay, absence_deduction, "
-        "unpaid_leave_deduction, allowances, manual_deductions, gross_pay, deductions, net_pay, "
-        "hr_confirmed_at, employee_confirmed_at FROM payroll "
-        "WHERE payroll_id = %s AND employee_id = %s",
+        """
+        SELECT p.pay_period, p.monthly_salary, p.overtime_pay, p.absence_deduction,
+               p.unpaid_leave_deduction, p.allowances, p.manual_deductions,
+               p.gross_pay, p.deductions, p.net_pay,
+               p.hr_confirmed_at, p.employee_confirmed_at,
+               a.employee_code, e.first_name, e.middle_name, e.last_name, e.suffix,
+               d.dept_name AS department, pos.title AS position
+        FROM payroll p
+        JOIN employees e ON e.employee_id = p.employee_id
+        LEFT JOIN account a ON a.employee_id = e.employee_id
+        LEFT JOIN departments d ON d.department_id = e.department_id
+        LEFT JOIN positions pos ON pos.position_id = e.position_id
+        WHERE p.payroll_id = %s AND p.employee_id = %s
+        LIMIT 1
+        """,
         (payroll_id, employee_id),
     )
     if not row:
         raise ApiError("Payslip not found.", 404)
     if row.get("hr_confirmed_at") is None or row.get("employee_confirmed_at") is None:
-        raise ApiError("The official payslip is available after HR confirms payment and you acknowledge receipt.", 403)
-    lines = "".join(
-        f"<tr><th>{label}</th><td>&#8369;{float(row[key]):,.2f}</td></tr>"
-        for label, key in (("Monthly salary", "monthly_salary"), ("Overtime pay", "overtime_pay"),
-                           ("Absence deduction", "absence_deduction"), ("Unpaid leave deduction", "unpaid_leave_deduction"),
-                           ("Allowances", "allowances"), ("Manual deductions", "manual_deductions"),
-                           ("Gross pay", "gross_pay"), ("Total deductions", "deductions"), ("Net pay", "net_pay"))
+        raise ApiError(
+            "The official payslip is available after HR confirms payment and you acknowledge receipt.",
+            403,
+        )
+
+    def money(value):
+        return "PHP " + format(float(value or 0), ",.2f")
+
+    def date_label(value):
+        if not value:
+            return "-"
+        return value.strftime("%b %d, %Y %I:%M %p") if hasattr(value, "strftime") else str(value)
+
+    period_value = row["pay_period"]
+    period = period_value.strftime("%B %Y") if hasattr(period_value, "strftime") else str(period_value)
+    period_code = period_value.strftime("%Y-%m") if hasattr(period_value, "strftime") else str(period_value)[:7]
+    employee_name = " ".join(
+        part for part in (
+            row.get("first_name"), row.get("middle_name"), row.get("last_name"), row.get("suffix")
+        ) if part and str(part).lower() != "none"
     )
-    period = escape(row["pay_period"].strftime("%B %Y") if hasattr(row["pay_period"], "strftime") else str(row["pay_period"]))
-    page = (
-        "<!doctype html><meta charset=utf-8><title>Payslip " + period + "</title>"
-        "<style>body{font:16px system-ui;max-width:460px;margin:3rem auto}table{width:100%;border-collapse:collapse}"
-        "th,td{padding:.6rem 0;border-bottom:1px solid #ddd;text-align:left}td{text-align:right}</style>"
-        "<h2>Payslip &ndash; " + period + "</h2><table>" + lines + "</table>"
-        "<p><button onclick=print()>Print</button></p>"
+    employee_code = "".join(
+        char for char in str(row.get("employee_code") or employee_id)
+        if char.isalnum() or char in "-_"
     )
-    resp = Response(page, mimetype="text/html")
-    if request.args.get("download"):
-        resp.headers["Content-Disposition"] = f"attachment; filename=payslip-{payroll_id}.html"
-    return resp
+    filename = "payslip-%s-%s.pdf" % (employee_code or employee_id, period_code)
+
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(
+        name="PayslipBrand", parent=styles["Title"], fontName="Helvetica-Bold",
+        fontSize=19, leading=23, textColor=colors.HexColor("#17365D"),
+        alignment=TA_CENTER, spaceAfter=3,
+    ))
+    styles.add(ParagraphStyle(
+        name="PayslipSub", parent=styles["Normal"], fontSize=10,
+        textColor=colors.HexColor("#586579"), alignment=TA_CENTER, spaceAfter=14,
+    ))
+    styles.add(ParagraphStyle(
+        name="PayslipSection", parent=styles["Heading2"], fontSize=11,
+        leading=14, textColor=colors.HexColor("#17365D"), spaceBefore=12, spaceAfter=6,
+    ))
+    styles.add(ParagraphStyle(
+        name="PayslipSmall", parent=styles["Normal"], fontSize=8,
+        leading=11, textColor=colors.HexColor("#586579"),
+    ))
+
+    buffer = BytesIO()
+    document = SimpleDocTemplate(
+        buffer, pagesize=A4, rightMargin=18 * mm, leftMargin=18 * mm,
+        topMargin=17 * mm, bottomMargin=17 * mm,
+        title="Payslip - %s - %s" % (employee_name or employee_code, period),
+        author="Biri-Go Employee Management System",
+    )
+    story = [
+        Paragraph("BIRI-GO", styles["PayslipBrand"]),
+        Paragraph("EMPLOYEE PAYSLIP", styles["PayslipSub"]),
+        Paragraph(escape(period), styles["Heading1"]),
+        Spacer(1, 5),
+    ]
+
+    employee_details = [
+        [Paragraph("<b>Employee name</b>", styles["Normal"]),
+         Paragraph(escape(employee_name or "-"), styles["Normal"])],
+        [Paragraph("<b>Employee ID</b>", styles["Normal"]),
+         Paragraph(escape(str(row.get("employee_code") or employee_id)), styles["Normal"])],
+        [Paragraph("<b>Department</b>", styles["Normal"]),
+         Paragraph(escape(str(row.get("department") or "-")), styles["Normal"])],
+        [Paragraph("<b>Position</b>", styles["Normal"]),
+         Paragraph(escape(str(row.get("position") or "-")), styles["Normal"])],
+    ]
+    story.append(Table(employee_details, colWidths=[42 * mm, 125 * mm], style=TableStyle([
+        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#F1F5F9")),
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#D8E0EA")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#D8E0EA")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+    ])))
+
+    def amount_table(items):
+        rows = [[Paragraph("<b>Description</b>", styles["Normal"]),
+                 Paragraph("<b>Amount</b>", styles["Normal"])]]
+        rows.extend([
+            [Paragraph(escape(label), styles["Normal"]),
+             Paragraph(escape(money(row[key])), styles["Normal"])]
+            for label, key in items
+        ])
+        return Table(rows, colWidths=[125 * mm, 42 * mm], style=TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EAF0F7")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#17365D")),
+            ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+            ("LINEBELOW", (0, 0), (-1, 0), 0.8, colors.HexColor("#AAB8C8")),
+            ("LINEBELOW", (0, 1), (-1, -1), 0.35, colors.HexColor("#E1E7EF")),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 7),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+        ]))
+
+    story.append(Paragraph("Earnings", styles["PayslipSection"]))
+    story.append(amount_table([
+        ("Basic monthly salary", "monthly_salary"),
+        ("Overtime pay", "overtime_pay"),
+        ("Allowances", "allowances"),
+        ("Gross pay", "gross_pay"),
+    ]))
+    story.append(Paragraph("Deductions", styles["PayslipSection"]))
+    story.append(amount_table([
+        ("Absence deduction", "absence_deduction"),
+        ("Unpaid leave deduction", "unpaid_leave_deduction"),
+        ("Other deductions", "manual_deductions"),
+        ("Total deductions", "deductions"),
+    ]))
+
+    net_table = Table(
+        [[Paragraph("<b>NET PAY</b>", styles["Normal"]),
+          Paragraph("<b>%s</b>" % escape(money(row["net_pay"])), styles["Normal"])]],
+        colWidths=[125 * mm, 42 * mm],
+        style=TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#E8F3EC")),
+            ("TEXTCOLOR", (0, 0), (-1, -1), colors.HexColor("#17643A")),
+            ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#A7CFB4")),
+            ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 9),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 9),
+            ("TOPPADDING", (0, 0), (-1, -1), 10),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+        ]),
+    )
+    story.extend([Spacer(1, 12), net_table, Paragraph("Payment confirmation", styles["PayslipSection"])])
+    confirmation_rows = [
+        ["HR confirmed payment", date_label(row.get("hr_confirmed_at"))],
+        ["Employee confirmed receipt", date_label(row.get("employee_confirmed_at"))],
+    ]
+    story.append(Table(confirmation_rows, colWidths=[75 * mm, 92 * mm], style=TableStyle([
+        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#F1F5F9")),
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#D8E0EA")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#D8E0EA")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+    ])))
+    story.extend([
+        Spacer(1, 12),
+        Paragraph(
+            "This document was generated by Biri-Go. Please contact HR if you have questions about this payslip.",
+            styles["PayslipSmall"],
+        ),
+    ])
+    document.build(story)
+    buffer.seek(0)
+
+    return send_file(
+        buffer,
+        mimetype="application/pdf",
+        as_attachment=request.args.get("download") == "1",
+        download_name=filename,
+        conditional=False,
+    )
 
 
 @employee_bp.get("/employee/payslips/<int:payroll_id>")

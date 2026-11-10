@@ -3,7 +3,7 @@
  *   GET  /api/employee/summary                 everything shown on the dashboard
  *   POST /api/employee/attendance/check-in     |  .../check-out
  *   POST /api/employee/leaves                  { type, start_date, end_date }
- *   GET  /employee/payslips/<id>[?download=1]  printable payslip
+ *   GET  /employee/payslips/<id>[?download=1]  PDF payslip
  */
 (() => {
   'use strict';
@@ -178,7 +178,7 @@
       const unlocked = !!p.hr_confirmed && !!p.employee_confirmed;
       const status = !p.hr_confirmed ? 'Waiting for HR' : !p.employee_confirmed ? 'Awaiting your confirmation' : 'Confirmed';
       const action = unlocked
-        ? `<a href="/employee/payslips/${p.id}" target="_blank" rel="noopener">View</a> · <a href="/employee/payslips/${p.id}?download=1">Download</a>`
+        ? `<a href="/employee/payslips/${p.id}" target="_blank" rel="noopener">View</a> · <a href="/employee/payslips/${p.id}?download=1" download>Download</a>`
         : p.hr_confirmed
           ? `<button class="btn btn-primary btn-sm" type="button" data-confirm-payslip="${p.id}">Confirm receipt</button>`
           : '<span class="muted">Not available yet</span>';
