@@ -1,74 +1,30 @@
-# Biri-Go: Biringan Employee Management System
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo.png">
+    <img src="assets/logo-dark.png" alt="Biringan Go Logistics" width="250" style="display: block; margin: 0;"/>
+  </picture>
+</div>
 
-A role-based employee management web app for a logistics company, covering employee records, attendance, leave, payroll, HR processes, and company reports. Built with **Flask**, **MySQL**, and **vanilla JavaScript**, and it can also run as a standalone Windows desktop app.
+<h1 align="center" style="font-size: 40px;">Biri-Go</h1>
 
-## Features
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-111111?style=flat-square&logo=python&logoColor=3776AB" alt="Python">
+  <img src="https://img.shields.io/badge/Flask-111111?style=flat-square&logo=flask&logoColor=FFFFFF" alt="Flask">
+  <img src="https://img.shields.io/badge/MySQL_Server-111111?style=flat-square&logo=mysql&logoColor=4479A1" alt="MySQL Server">
+  <img src="https://img.shields.io/badge/MySQL_Connector%2FPython-111111?style=flat-square&logo=mysql&logoColor=4479A1" alt="MySQL Connector/Python">
+  <br>
+  <img src="https://img.shields.io/badge/JavaScript-111111?style=flat-square&logo=javascript&logoColor=F7DF1E" alt="JavaScript">
+  <img src="https://img.shields.io/badge/HTML5-111111?style=flat-square&logo=html5&logoColor=E34F26" alt="HTML5">
+  <img src="https://img.shields.io/badge/CSS3-111111?style=flat-square&logo=css3&logoColor=1572B6" alt="CSS3">
+  <img src="https://img.shields.io/badge/Git-111111?style=flat-square&logo=git&logoColor=F05032" alt="Git">
+  <img src="https://img.shields.io/badge/GitHub-111111?style=flat-square&logo=github&logoColor=FFFFFF" alt="GitHub">
+</p>
 
-| Portal | Role | What it does |
-|---|---|---|
-| **Admin** (`/admin`) | `admin` | Dashboard, accounts, employees, departments, positions, salaries, leave management, reports, database backups and restore, personal pay and settings |
-| **HR** (`/hr`) | `hr` | Employees, departments, attendance, leave requests/balances/calendar, recruitment (jobs and applicant board), onboarding/offboarding, performance reviews, training, announcements, holidays, payroll, reports, settings |
-| **Owner** (`/owner`) | `owner` | **View-only** access to everything HR sees, plus salaries and payroll. Every write request to `/api/owner/*` is rejected |
-| **Employee** (`/employee`) | `employee` | Dashboard, check-in/check-out, attendance history, leave requests, payslips (with acknowledgement), company news, profile and profile picture |
+<br>
 
-### Highlights
+Biri-Go (Biringan Employee Management System) is a web-based employee management system for a logistics company. Staff sign in to a role-based browser portal (admin, HR, owner, or employee) that covers employee records, attendance, leave, payroll, and company reports. A Flask backend serves every portal, and all records live in one shared MySQL database. It can also run as a standalone Windows desktop app.
 
-- **Single source of truth.** Leave and attendance live only in `leave_requests` and `attendance`. Admin, HR, and employee views all read and write the same tables and share the same validation rules (`utils.validate_leave_request`): valid leave type, sex-restricted types, no overlapping requests, and sufficient balance.
-- **Philippine-style leave types.** Vacation (PTO), Sick, Emergency, Bereavement, Maternity, Paternity, Parental, Special (Mandated), and Unpaid (LOA). Vacation, Sick, and Emergency entitlements are editable in HR Settings.
-- **Payroll.** Monthly records per employee. Daily rate is salary ÷ 26, hourly rate is daily ÷ 8, and overtime is paid at 1.25×. Only recorded absences and approved unpaid leave are deducted, and an absence overlapping unpaid leave is not deducted twice. HR confirms payment, then the employee acknowledges receipt. Payslips are exported as PDFs (ReportLab).
-- **Backups.** Create, verify, restore, and delete compressed database backups from the Admin portal or the command line.
-- **Profile pictures.** Uploaded images are validated and re-saved as 256×256 files (JPEG, PNG, or WebP, up to 2 MB).
-- **Activity log.** Key actions are recorded in an `activity_log` table.
-
-## Tech stack
-
-- **Backend:** Python, Flask 3, `mysql-connector-python`, ReportLab, Pillow
-- **Database:** MySQL 8 (InnoDB)
-- **Frontend:** HTML, CSS, and vanilla JavaScript (no build step)
-- **Desktop build (optional):** `pywebview` + PyInstaller
-
-## Project structure
-
-```
-requirements.txt
-SECURITY.md
-CODE_OF_CONDUCT.md
-system/
-├── backend/
-│   ├── main.py                  app setup, login, accounts, settings, startup
-│   ├── config.py                environment-based configuration
-│   ├── auth.py                  role_required decorator
-│   ├── db.py                    connection pool, schema upgrades, activity log
-│   ├── utils.py                 constants, validation, leave rules, settings
-│   ├── profile_pictures.py      profile picture upload/serve
-│   ├── employee_documents.py    employee document uploads (see Known limitations)
-│   ├── backup_restore.py        backup / verify / restore CLI
-│   ├── desktop.py               desktop launcher (pywebview)
-│   ├── desktop.spec             PyInstaller spec
-│   ├── create_app_user.sql.example   least-privilege DB account
-│   ├── SECURITY_OPERATIONS.md   production and backup runbook
-│   └── routes/
-│       ├── admin.py             admin API
-│       ├── hr.py                HR API and HR tables
-│       ├── owner.py             owner API (read-only)
-│       ├── employee.py          employee API and payslip PDFs
-│       └── my_pay.py            "my pay" for admin/HR/owner accounts
-├── template/                    login, admin, hr, owner, employee_dashboard (.html)
-└── statistics/                  static assets, served at /statistics
-    ├── css/
-    ├── js/
-    └── images/
-```
-
-## Getting started
-
-### Prerequisites
-
-- Python 3.10+
-- MySQL 8
-- `mysqldump` and `mysql` on your `PATH` (only needed for backups)
-
-### 1. Install dependencies
+### Quick start
 
 ```bash
 pip install -r requirements.txt
@@ -91,111 +47,79 @@ Never commit these values.
 ```bash
 # macOS / Linux
 export SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))")
-export DB_PASSWORD=your-mysql-password
-```
+export DB_PASSWORD=your-mysql-password      # optional: DB_HOST, DB_USER, DB_NAME
 
-```powershell
-# Windows PowerShell
-$env:SECRET_KEY = python -c "import secrets; print(secrets.token_hex(32))"
-$env:DB_PASSWORD = "your-mysql-password"
-```
-
-| Variable | Default | Notes |
-|---|---|---|
-| `APP_ENV` | `development` | Set to `production` for hardened mode (see below) |
-| `SECRET_KEY` | random (dev only) | Required in production; at least 32 characters |
-| `DB_HOST` | `localhost` | |
-| `DB_PORT` | `3306` | |
-| `DB_USER` | `root` | Must not be `root`/`admin` in production |
-| `DB_PASSWORD` | *(empty)* | |
-| `DB_NAME` | `biri_go` | |
-| `DB_AUTO_INIT` | `1` in dev, `0` in production | Automatic schema creation/upgrades |
-| `COOKIE_SECURE` | off | Set to `1` when serving over HTTPS |
-| `FLASK_DEBUG` | off | `1` only on your own machine; blocked in production |
-| `DB_RESTORE_USER` / `DB_RESTORE_PASSWORD` | none | Admin credentials for backup verify/restore |
-
-### 4. Run
-
-```bash
 cd system/backend
-python main.py
+python main.py                              # http://127.0.0.1:5000
 ```
 
-Open <http://127.0.0.1:5000>.
+On the first run against an empty database, the console prints a one-time password for the admin account `biri-000000`. Sign in and change it right away under **Settings → Change Password**. On Windows PowerShell, set variables with `$env:SECRET_KEY = "..."` instead of `export`.
 
-On the first run against an empty `account` table, the console prints a one-time password for the admin account **`biri-000000`**. Sign in and change it immediately under **Settings → Change Password**.
+### Features
 
-### Employee IDs
+- **Four role-based portals:** Admin, HR, Owner, and Employee each get their own page and API. Roles are enforced on the server, so one role cannot reach another's data.
+- **Employee records and accounts:** Add, edit, and remove employees with server-side validation (names, Philippine mobile numbers, 18+ age check, salary range). Each account gets a generated ID such as `biri-048213`.
+- **Departments and positions:** Admin and HR manage departments and department heads, and every position belongs to a department.
+- **Attendance:** Employees check in and check out from their dashboard. Status (Present, Late, Absent, On Leave) follows the work hours and grace period set in HR Settings, and HR can record overtime and remarks.
+- **Leave management:** Vacation, Sick, Emergency, Bereavement, Maternity, Paternity, Parental, Special, and Unpaid leave. Requests are checked for overlaps, remaining balance, and sex-restricted types, and are approved or rejected by admin or HR with a leave calendar and balances view. Vacation, Sick, and Emergency entitlements are editable.
+- **Payroll and payslips:** HR generates monthly payroll with overtime pay (1.25×), absence and unpaid-leave deductions, allowances, and manual deductions. HR confirms payment, the employee acknowledges receipt, and payslips download as PDFs.
+- **HR tools:** Recruitment (job postings and an applicant board), onboarding and offboarding checklists, performance reviews, training sessions, announcements, and company holidays.
+- **Owner portal (view-only):** The owner sees everything HR sees, plus salaries and payroll. Every write request to the owner API is rejected.
+- **Reports and activity log:** Company reports for admin, HR, and the owner, and an activity log of key actions.
+- **Backup and restore:** Create, verify, restore, and delete compressed database backups from the Admin portal or the command line. Restoring takes a safety backup first when possible.
+- **Profiles:** Every user can view their profile, upload a profile picture (validated and resized to 256×256), and change their password.
+- **Security by default:** Hashed passwords, CSRF tokens on every write request, JSON-only write endpoints, login rate limiting, a strict Content-Security-Policy, and a production mode that refuses to start with unsafe settings.
+- **Desktop app:** Wrap the app in a native window with `pywebview` and package it into an `.exe` with PyInstaller.
 
-New accounts get generated IDs in the format `biri-######` (for example `biri-048213`). Users sign in with their ID and password.
+### Roles
 
-## Desktop app (optional)
-
-The app can be wrapped in a native window with `pywebview` and packaged with PyInstaller:
-
-```bash
-pip install pywebview pyinstaller
-cd system/backend
-python desktop.py                 # run in a desktop window
-pyinstaller desktop.spec          # build desktop.exe
-```
-
-`desktop.py` serves Flask on port 5000 and opens it in a 1280×800 window.
-
-## Production deployment
-
-Set `APP_ENV=production`. The app then refuses to start unless:
-
-- `SECRET_KEY` is set (32+ characters),
-- `DB_USER` is not `root` or `admin`,
-- `DB_AUTO_INIT` is disabled, and
-- `FLASK_DEBUG` is off.
-
-Cookies are marked `Secure` automatically in production, so serve the app over HTTPS.
-
-Use a restricted database account: copy `system/backend/create_app_user.sql.example`, replace the placeholder password, and run it as a MySQL administrator. The account only gets `SELECT`, `INSERT`, `UPDATE`, and `DELETE` on `biri_go.*`. Full steps are in [`system/backend/SECURITY_OPERATIONS.md`](system/backend/SECURITY_OPERATIONS.md).
-
-## Backups
-
-From `system/backend`:
-
-```bash
-python backup_restore.py backup                          # creates backups/*.sql.gz
-python backup_restore.py verify backups/YOUR_BACKUP.sql.gz
-python backup_restore.py restore backups/YOUR_BACKUP.sql.gz --confirm "RESTORE BIRI-GO DATABASE"
-```
-
-You can also manage backups from the **Backups** page in the Admin portal. Restoring is destructive: it drops and recreates the schema, so a safety backup is taken first when possible. Backups contain personal and payroll data. They are git-ignored, so keep them in protected storage.
-
-## Roles and access
-
-| Capability | admin | hr | owner | employee |
+| Capability | Admin | HR | Owner | Employee |
 |---|:-:|:-:|:-:|:-:|
-| Admin portal: accounts, departments, positions, leaves, reports, backups | ✔ | | | |
-| HR portal (`/api/hr/*`) | | ✔ | | |
-| Owner portal, view-only (`/api/owner/*`) | | | ✔ | |
-| Employee dashboard (`/api/employee/*`) | | | | ✔ |
+| Accounts, positions, backups, admin reports | ✔ | | | |
+| Employees, departments, leaves, salaries | ✔ | | | |
+| Attendance, payroll, recruitment, onboarding, reviews, training, announcements, holidays | | ✔ | | |
+| View-only access to HR data, salaries, and payroll | | | ✔ | |
+| Check-in/out, own leave requests, payslips, profile | | | | ✔ |
 
-## Security
+### Project structure
 
-- Passwords are hashed with Werkzeug.
-- Sessions are HttpOnly, SameSite=Lax, last 8 hours, and are `Secure` in production.
-- **CSRF protection:** every write request needs a session-bound `X-CSRF-Token`, checked with a constant-time comparison.
-- Write requests to `/api/*` must be `application/json`.
-- Login is rate limited to 5 failed attempts per 5 minutes per employee ID and IP address (in memory; resets on restart).
-- Responses send a strict Content-Security-Policy, `X-Content-Type-Options`, `X-Frame-Options`, and `Referrer-Policy` headers.
-- Input is validated server-side (names, Philippine mobile numbers `09XXXXXXXXX`, 18+ age check, salary range, and more).
-- Uploaded files are renamed to random IDs and checked by type and size.
+```
+system/
+├── backend/        Flask app: main.py, config.py, auth.py, db.py, utils.py,
+│                   backup_restore.py, profile_pictures.py, desktop.py
+│   └── routes/     admin.py, hr.py, owner.py, employee.py, my_pay.py
+├── template/       login, admin, hr, owner, employee_dashboard (.html)
+└── statistics/     static CSS, JS, and images, served at /statistics
+```
 
-To report a vulnerability, see [SECURITY.md](SECURITY.md).
+### Production
 
-## Known limitations
+Set `APP_ENV=production` and the app will refuse to start unless `SECRET_KEY` is set (32+ characters), the database user is not `root` or `admin`, automatic schema setup is off, and debug mode is off. Use a least-privilege database account (`system/backend/create_app_user.sql.example`) and serve over HTTPS. The full runbook, including backup, verify, and restore commands, is in [system/backend/SECURITY_OPERATIONS.md](system/backend/SECURITY_OPERATIONS.md). To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
-- **Employee documents are not wired up yet.** The employee dashboard has a Documents page and `employee_documents.py` exists, but its blueprint is not registered in `main.py`, so the `/api/employee/documents` calls fail.
-- **Base schema file.** `Biri-Go.sql` is required for a fresh install but is currently excluded by the `*.sql` rule in `.gitignore`.
-- **Login rate limiting** is in memory only and resets on restart.
-- **Password reset** and an **automated test suite** are not implemented.
+### Developers
 
-## Contributing
+**[Arca, Howard Lance A.]**  
+**[Armia, Ron Cedrick G.]**  
+**[Suministrado, Brian James F.]**  
 
-Please read the [Code of Conduct](CODE_OF_CONDUCT.md) before contributing. Pull requests are welcome.
+
+---
+
+## Coursework Project
+
+**[Laguna State Polytechnic University]** | **[College of Computer Studies]**  
+**[CMSC 203 - Object Oriented Programming], [CITEC 104 – Data Structures and Algorithm], [ITEC 105 – Information Management]**  
+**Instructors:** [Ms. Roxanne Garbo, Sir Rolan C. Sotomayor, Sir Jencel P. Sofer]  
+**Academic Year:** [2026–2027]
+
+Biri-Go is developed as the final project for [course names]. It demonstrates [what your project shows, for example: object-oriented design, database integration, and software engineering practices].
+
+| Course | Where it shows up in the project |
+|---|---|
+| **[CMSC 203 (OOP)]** | [Example: Flask blueprints per role, a shared `ApiError` exception family, validation helpers] |
+| **[ITEC 104 (Data Structures and Algorithms)]** | [Example: the in-memory login rate limiter, leave overlap detection, payroll rate calculations] |
+| **[ITEC 105 (Information Management)]** | [Example: a MySQL schema with keys and constraints, parameterized queries, transactions, reports, activity log, backup and restore] |
+
+---
+
+*Last Updated: November 2026*
