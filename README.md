@@ -28,9 +28,24 @@ Biri-Go (Biringan Employee Management System) is a web-based employee management
 
 ```bash
 pip install -r requirements.txt
-mysql -u root -p < Biri-Go.sql
+```
 
-# set these in your shell (never commit them)
+### 2. Set up the database
+
+Create the `biri_go` database and load the base schema (`Biri-Go.sql`):
+
+```bash
+mysql -u root -p < Biri-Go.sql
+```
+
+> The core tables (`account`, `employees`, `departments`, `positions`, `leave_requests`, `attendance`) come from `Biri-Go.sql`. The app creates and upgrades the remaining tables (payroll, activity log, HR tables) on startup when `DB_AUTO_INIT=1`, which is the default in development.
+
+### 3. Configure environment variables
+
+Never commit these values.
+
+```bash
+# macOS / Linux
 export SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))")
 export DB_PASSWORD=your-mysql-password      # optional: DB_HOST, DB_USER, DB_NAME
 
