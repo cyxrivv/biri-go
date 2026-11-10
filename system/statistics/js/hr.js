@@ -953,7 +953,7 @@ async function renderPayroll() {
 
     const records = S.payroll || [];
     if (!records.length) {
-        tableBody.innerHTML = empty("No payroll records found.", 6);
+        tableBody.innerHTML = empty("No payroll records found.", 7);
         return;
     }
 
@@ -964,7 +964,14 @@ async function renderPayroll() {
             <td>₱${Number(p.gross_pay || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</td>
             <td>₱${Number(p.deductions || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</td>
             <td>₱${Number(p.net_pay || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</td>
-            <td>${badge(p.payment_status || "Pending")}</td>
+            <td>${badge(p.payment_status || "Unpaid")}</td>
+            <td>
+                <small>HR: ${p.hr_confirmed_at ? "Confirmed" : "Pending"}</small><br>
+                <small>Employee: ${p.employee_confirmed_at ? "Confirmed" : "Pending"}</small><br>
+                ${p.hr_confirmed_at
+                    ? badge("Confirmed")
+                    : `<button type="button" class="btn btn-primary btn-sm" data-confirm-payment="${p.id}">Confirm payment</button>`}
+            </td>
         </tr>
     `).join("");
 }
@@ -1467,6 +1474,24 @@ function bind() {
         }
     }));
 
+    const payrollBody = $("#payroll-table tbody");
+    if (payrollBody) payrollBody.addEventListener("click", ev => {
+        const button = ev.target.closest("[data-confirm-payment]");
+        if (!button) return;
+        run(async () => {
+            button.disabled = true;
+            try {
+                await api(`/api/hr/payroll/${button.dataset.confirmPayment}/confirm-payment`, { method: "PUT", body: "{}" });
+                await load("payroll");
+                renderPayroll();
+                toast("Payment confirmed. Waiting for employee receipt confirmation.");
+            } catch (err) {
+                toast(err.message || "Unable to confirm payment.", true);
+            } finally {
+                button.disabled = false;
+            }
+        });
+    });
     $("#holiday-form").addEventListener("submit", ev => {
 
         ev.preventDefault();
