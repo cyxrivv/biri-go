@@ -953,7 +953,7 @@ async function renderPayroll() {
 
     const records = S.payroll || [];
     if (!records.length) {
-        tableBody.innerHTML = empty("No payroll records found.", 7);
+        tableBody.innerHTML = empty("No payroll records found.", 8);
         return;
     }
 
@@ -961,6 +961,14 @@ async function renderPayroll() {
         <tr>
             <td>${esc(p.employee_name || `${p.first_name || ""} ${p.last_name || ""}`.trim() || empName(p.employee_id))}</td>
             <td>${esc(String(p.pay_period || "").slice(0, 7) || "-")}</td>
+            <td><details><summary>View</summary><small>
+                Basic: ₱${Number(p.monthly_salary || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}<br>
+                Overtime: ₱${Number(p.overtime_pay || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}<br>
+                Absence: ₱${Number(p.absence_deduction || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}<br>
+                Unpaid leave: ₱${Number(p.unpaid_leave_deduction || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}<br>
+                Allowances: ₱${Number(p.allowances || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}<br>
+                Other deductions: ₱${Number(p.manual_deductions || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+            </small></details></td>
             <td>₱${Number(p.gross_pay || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</td>
             <td>₱${Number(p.deductions || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</td>
             <td>₱${Number(p.net_pay || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</td>
@@ -1462,7 +1470,7 @@ function bind() {
         try {
             await api("/api/hr/payroll", {
                 method: "POST",
-                body: JSON.stringify({ employee_id: Number(employeeId), pay_period: `${month}-01` })
+                body: JSON.stringify({ employee_id: Number(employeeId), pay_period: `${month}-01`, allowances: Number($("#payroll-allowances").value || 0), manual_deductions: Number($("#payroll-manual-deductions").value || 0) })
             });
             await load("payroll");
             renderPayroll();
