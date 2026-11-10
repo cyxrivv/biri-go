@@ -167,9 +167,11 @@
                             <p class="muted small" id="pay-period">—</p>
                             <p class="muted small">Net salary</p>
                             <p class="net" id="pay-net">—</p>
+                            <p class="muted small" id="pay-confirmation" aria-live="polite"></p>
                             <div class="btn-row">
-                                <a class="btn btn-secondary btn-ghost" id="pay-download" href="#" download><i class="fas fa-download" aria-hidden="true"></i> Download payslip</a>
-                                <a class="btn btn-secondary btn-ghost" id="pay-view" href="#" target="_blank" rel="noopener"><i class="far fa-eye" aria-hidden="true"></i> View</a>
+                                <button class="btn btn-primary" id="pay-confirm" type="button" hidden>Confirm receipt</button>
+                                <a class="btn btn-secondary btn-ghost" id="pay-download" href="#" download hidden><i class="fas fa-download" aria-hidden="true"></i> Download payslip</a>
+                                <a class="btn btn-secondary btn-ghost" id="pay-view" href="#" target="_blank" rel="noopener" hidden><i class="far fa-eye" aria-hidden="true"></i> View</a>
                             </div>
                         </div>
                         <p class="muted small" id="pay-empty" hidden>No payslips yet.</p>
@@ -265,7 +267,7 @@
                     <div class="panel-head"><h3>Payslip history</h3></div>
                     <div class="table-container table-wrap">
                         <table>
-                            <thead><tr><th scope="col">Period</th><th scope="col">Gross</th><th scope="col">Deductions</th><th scope="col">Net pay</th></tr></thead>
+                            <thead><tr><th scope="col">Period</th><th scope="col">Gross</th><th scope="col">Deductions</th><th scope="col">Net pay</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
                             <tbody id="payslip-rows"></tbody>
                         </table>
                     </div>

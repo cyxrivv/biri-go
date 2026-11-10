@@ -252,6 +252,15 @@
                             <input type="month" id="payroll-month">
                         </label>
 
+                        <label>
+                            Allowances (₱)
+                            <input type="number" id="payroll-allowances" min="0" step="0.01" value="0">
+                        </label>
+                        <label>
+                            Other Deductions (₱)
+                            <input type="number" id="payroll-manual-deductions" min="0" step="0.01" value="0">
+                        </label>
+
                         <button type="button" class="btn btn-primary" id="generate-payroll">
                             <i class="fas fa-calculator"></i> Generate Payroll
                         </button>
@@ -263,10 +272,12 @@
                                 <tr>
                                     <th>Employee</th>
                                     <th>Month</th>
+                                    <th>Pay Breakdown</th>
                                     <th>Gross Pay</th>
                                     <th>Deductions</th>
                                     <th>Net Pay</th>
-                                    <th>Status</th>
+                                    <th>Payment Status</th>
+                                    <th>Confirmations / Action</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
