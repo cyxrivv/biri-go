@@ -450,10 +450,18 @@ async function loadFormOptions() {
     formOptions.positions = o.positions;
 }
 
-function fillDepartmentSelect(select) {
-    select.innerHTML = formOptions.departments
+function fillDepartmentSelect(select, departments = formOptions.departments) {
+    select.innerHTML = departments
         .map((d) => `<option value="${d.id}">${escapeHtml(d.name)}</option>`)
         .join("");
+}
+
+function getMinimumBirthdayForAge(minimumAge = 18) {
+    const today = new Date();
+    const year = today.getFullYear() - minimumAge;
+    const month = today.getMonth();
+    const day = Math.min(today.getDate(), new Date(year, month + 1, 0).getDate());
+    return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 function fillPositionSelect(deptSelect, posSelect, selectedId) {
@@ -469,11 +477,20 @@ function updateAccountRoleFields() {
     const role = byId("acc-role").value;
     const isAdmin = role === "admin";
     const isOwner = role === "owner";
+    const isHr = role === "hr";
 
     // Admin: no department/position. Owner: no department/position/salary.
     byId("acc-department-field").hidden = isAdmin || isOwner;
     byId("acc-position-field").hidden = isAdmin || isOwner;
     byId("acc-salary-field").hidden = isOwner;
+
+    const departments = isHr
+        ? formOptions.departments.filter(
+            (d) => String(d.name).trim().toLowerCase() === "human resources & admin"
+        )
+        : formOptions.departments;
+    fillDepartmentSelect(byId("acc-department"), departments);
+    fillPositionSelect(byId("acc-department"), byId("acc-position"));
 
     if (isOwner) byId("acc-salary").value = "";
 }
@@ -493,7 +510,7 @@ async function openAccountModal() {
     fillPositionSelect(byId("acc-department"), byId("acc-position"));
     updateAccountRoleFields();
 
-    byId("acc-birthday").max = new Date().toISOString().slice(0, 10);
+    byId("acc-birthday").max = getMinimumBirthdayForAge(18);
     byId("account-modal").hidden = false;
     byId("acc-first").focus();
 }
@@ -590,6 +607,12 @@ document.addEventListener("DOMContentLoaded", () => {
         ev.preventDefault();
         const errBox = byId("account-error");
         const val = (id) => byId(id).value;
+
+        if (!val("acc-birthday") || val("acc-birthday") > getMinimumBirthdayForAge(18)) {
+            errBox.textContent = "Employee must be at least 18 years old.";
+            errBox.hidden = false;
+            return;
+        }
 
         if (val("acc-password") !== val("acc-confirm")) {
             errBox.textContent = "Passwords do not match.";
