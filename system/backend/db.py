@@ -126,6 +126,8 @@ def init_db():
         add_column(cur, "payroll", "unpaid_leave_deduction", "DECIMAL(10,2) NOT NULL DEFAULT 0")
         add_column(cur, "payroll", "allowances", "DECIMAL(10,2) NOT NULL DEFAULT 0")
         add_column(cur, "payroll", "manual_deductions", "DECIMAL(10,2) NOT NULL DEFAULT 0")
+        add_column(cur, "payroll", "hr_confirmed_at", "DATETIME NULL")
+        add_column(cur, "payroll", "employee_confirmed_at", "DATETIME NULL")
         
 
 def log_activity(cur, message):
