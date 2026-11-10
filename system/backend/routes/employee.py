@@ -291,14 +291,12 @@ def request_leave():
     return jsonify(message="Leave request sent."), 201
 
 
-@employee_bp.get("/employee/payslips/<int:payroll_id>")
-@role_required("employee")
-def payslip(payroll_id):
-    """Printable payslip. ?download=1 saves it as a file."""
+def render_payslip(payroll_id, employee_id):
+    """Printable payslip for ONE employee's own payroll row. ?download=1 saves it as a file."""
     row = fetch_one(
         "SELECT pay_period, gross_pay, deductions, net_pay FROM payroll "
         "WHERE payroll_id = %s AND employee_id = %s",
-        (payroll_id, _current_employee_id()),
+        (payroll_id, employee_id),
     )
     if not row:
         raise ApiError("Payslip not found.", 404)
@@ -318,3 +316,9 @@ def payslip(payroll_id):
     if request.args.get("download"):
         resp.headers["Content-Disposition"] = f"attachment; filename=payslip-{payroll_id}.html"
     return resp
+
+
+@employee_bp.get("/employee/payslips/<int:payroll_id>")
+@role_required("employee")
+def payslip(payroll_id):
+    return render_payslip(payroll_id, _current_employee_id())

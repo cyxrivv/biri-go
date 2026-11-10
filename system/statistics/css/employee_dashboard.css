@@ -212,6 +212,7 @@ ul { list-style: none; }
     justify-content: center;
     font-weight: 700;
     font-size: 0.95rem;
+    flex-shrink: 0;
 }
 .avatar.lg { width: 3.5rem; height: 3.5rem; font-size: 1.15rem; background-color: var(--brand-100); color: var(--brand-800); }
 
@@ -569,9 +570,9 @@ tbody tr:hover { background-color: var(--brand-50); }
 .profile-note { margin-top: -0.5rem; }
 
 
-select, input[type="text"], input[type="email"], input[type="password"], input[type="date"], input[type="number"] {
-    height: 2.5rem;
-    padding: 0 0.8rem;
+select, input[type="text"], input[type="email"], input[type="password"], input[type="date"], input[type="number"], textarea {
+    min-height: 2.5rem;
+    padding: 0.6rem 0.8rem;
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
     background-color: var(--surface);
@@ -580,7 +581,16 @@ select, input[type="text"], input[type="email"], input[type="password"], input[t
     outline: none;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
-select:focus, input:focus { border-color: var(--brand-600); box-shadow: var(--ring); }
+textarea {
+    width: 100%;
+    min-height: 6rem;
+    resize: vertical;
+    line-height: 1.5;
+}
+select:focus, input:focus, textarea:focus {
+    border-color: var(--brand-600);
+    box-shadow: var(--ring);
+}
 
 dialog {
     border: 0;

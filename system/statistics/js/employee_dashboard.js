@@ -216,6 +216,7 @@
     const today = localToday();
     $('lv-start').value = today; $('lv-end').value = today;
     $('lv-start').min = today; $('lv-end').min = today;
+    $('lv-reason').value = '';
     $('lv-error').hidden = true;
     $('leave-dialog').showModal();
   }
@@ -224,7 +225,18 @@
     ev.preventDefault();
     const err = $('lv-error');
     err.hidden = true;
-    const body = { type: $('lv-type').value, start_date: $('lv-start').value, end_date: $('lv-end').value };
+    const body = {
+      type: $('lv-type').value,
+      start_date: $('lv-start').value,
+      end_date: $('lv-end').value,
+      reason: $('lv-reason').value.trim()
+    };
+    if (!body.reason) {
+      err.textContent = 'Please provide a reason for your leave request.';
+      err.hidden = false;
+      $('lv-reason').focus();
+      return;
+    }
     if (body.end_date < body.start_date) { err.textContent = 'The end date cannot be before the start date.'; err.hidden = false; return; }
     $('lv-submit').disabled = true;
     try {

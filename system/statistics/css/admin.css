@@ -1,5 +1,3 @@
-
-
 :root {
 
     --brand-900: #12372a;
@@ -230,6 +228,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
     justify-content: center;
     font-weight: 700;
     font-size: 0.95rem;
+    flex-shrink: 0;
 }
 
 .who {

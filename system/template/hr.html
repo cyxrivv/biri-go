@@ -38,7 +38,7 @@
 
                 <div class="user-menu">
                     <button type="button" class="user-btn" id="user-btn" aria-haspopup="true" aria-expanded="false">
-                        <span id="hr-avatar" class="avatar">HR</span>
+                        <span id="hr-avatar" class="avatar" data-profile-avatar>HR</span>
                         <span class="who hide-sm"><strong id="hr-name">Loading&hellip;</strong><small>Human Resources</small></span>
                         <i class="fas fa-chevron-down" aria-hidden="true"></i>
                     </button>
@@ -82,6 +82,7 @@
                     <p class="nav-title">Compensation</p>
                     <ul>
                         <li><a href="#payroll" data-section="payroll"><i class="fas fa-money-bill-wave"></i>Payroll</a></li>
+                        <li><a href="#my-pay" data-section="my-pay"><i class="fas fa-wallet"></i>My Salary &amp; Payslips</a></li>
                     </ul>
 
                     <p class="nav-title">Company</p>
@@ -272,6 +273,36 @@
                         </table>
                     </div>
                 </section>
+                <!-- ============ My Salary & Payslips ============ -->
+                <section id="page-my-pay" class="page" aria-labelledby="h-my-pay">
+                    <div class="section-header">
+                        <h2 id="h-my-pay"><i class="fas fa-wallet"></i> My Salary &amp; Payslips</h2>
+                    </div>
+
+                    <div class="dashboard-cards summary-cards">
+                        <div class="card card-green"><h3>Monthly Salary</h3><p id="mypay-salary">-</p><i class="fas fa-peso-sign card-icon"></i></div>
+                        <div class="card card-blue"><h3>Latest Net Pay</h3><p id="mypay-net">-</p><i class="fas fa-money-bill-wave card-icon"></i></div>
+                        <div class="card card-orange"><h3>Latest Period</h3><p id="mypay-period">-</p><i class="fas fa-calendar card-icon"></i></div>
+                    </div>
+
+                    <p class="muted" id="mypay-note" hidden></p>
+
+                    <div class="table-container">
+                        <table id="mypay-table">
+                            <thead>
+                                <tr>
+                                    <th>Period</th>
+                                    <th>Gross Pay</th>
+                                    <th>Deductions</th>
+                                    <th>Net Pay</th>
+                                    <th>Payslip</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </section>
+
                 <!-- ============ Leaves ============ -->
                 <section id="page-leaves" class="page" aria-labelledby="h-leaves">
                     <div class="section-header">
@@ -397,6 +428,18 @@
                     <div class="section-header"><h2 id="h-settings"><i class="fas fa-gear"></i> HR Settings</h2></div>
                     <div class="settings-grid">
                         <section class="report-box">
+                            <h3>Profile Picture</h3>
+                            <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+                                <img data-profile-img src="/statistics/images/default-avatar.png" alt="Your profile picture" width="96" height="96" style="border-radius:50%;object-fit:cover;">
+                                <div>
+                                    <input type="file" id="profilePicInput" accept="image/png,image/jpeg,image/webp" hidden>
+                                    <button type="button" id="profilePicBtn" class="btn btn-primary"><i class="fas fa-camera" aria-hidden="true"></i> Change photo</button>
+                                    <button type="button" id="profilePicRemove" class="btn btn-secondary" style="display:none;">Remove</button>
+                                    <p style="margin:8px 0 0;font-size:.85em;opacity:.7;">PNG, JPG or WEBP, up to 2 MB.</p>
+                                </div>
+                            </div>
+                        </section>
+                        <section class="report-box">
                             <h3>Work Schedule</h3>
                             <form id="settings-schedule" class="settings-form">
                                 <div class="form-grid">
@@ -465,6 +508,7 @@
 
     <div id="toast" class="toast" hidden role="status" aria-live="polite"></div>
 
+    <script src="/statistics/js/profile.js"></script>
     <script src="/statistics/js/hr.js"></script>
 </body>
 </html>

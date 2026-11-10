@@ -1,17 +1,5 @@
 "use strict";
 
-/* =====================================================================
-
-   Biri-Go HR page  (template/hr.html  +  statistics/js/hr.js)
-
-   - Talks to /api/hr/<resource> (REST: GET list, POST, PUT /<id>, DELETE /<id>)
-
-   - If the API is unreachable it falls back to in-memory demo data.
-
-   ===================================================================== */
-
-
-
 /* ---------- tiny helpers ---------- */
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -1005,6 +993,38 @@ function showSection(name) {
 
     window.scrollTo(0, 0);
 
+    if (name === "my-pay") loadMyPay();
+
+}
+
+/* ---------- my salary & payslips (own pay only; the server uses the session) ---------- */
+
+const myPeso = n => "\u20B1" + Number(n || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const myPeriod = s => s ? new Date(s + "T00:00:00").toLocaleDateString("en-PH", { month: "long", year: "numeric" }) : "-";
+
+async function loadMyPay() {
+    if (typeof DEMO !== "undefined" && DEMO) return;
+    const body = $("#mypay-table tbody"), note = $("#mypay-note");
+    try {
+        const d = await api("/api/me/pay");
+        const latest = d.payslips[0];
+        $("#mypay-salary").textContent = d.salary == null ? "-" : myPeso(d.salary);
+        $("#mypay-net").textContent = latest ? myPeso(latest.net_pay) : "-";
+        $("#mypay-period").textContent = latest ? myPeriod(latest.pay_period) : "-";
+        note.hidden = d.linked && d.payslips.length > 0;
+        note.textContent = !d.linked ? "No employee record is linked to your account, so there is no salary to show."
+            : "No payslips yet.";
+        body.innerHTML = d.payslips.map(p => `<tr>
+            <td>${esc(myPeriod(p.pay_period))}</td>
+            <td class="num">${myPeso(p.gross_pay)}</td>
+            <td class="num">${myPeso(p.deductions)}</td>
+            <td class="num">${myPeso(p.net_pay)}</td>
+            <td><a href="/me/payslips/${p.id}" target="_blank" rel="noopener">View</a> &middot;
+                <a href="/me/payslips/${p.id}?download=1">Download</a></td></tr>`).join("")
+            || `<tr><td colspan="5" class="muted">No payslips yet.</td></tr>`;
+    } catch (err) {
+        toast(err.message, true);
+    }
 }
 
 const route = () => showSection(location.hash.replace("#", "") || "dashboard");

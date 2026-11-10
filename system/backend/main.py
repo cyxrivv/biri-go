@@ -22,6 +22,8 @@ from routes.admin import admin_bp
 from routes.hr import hr_bp, init_hr_tables
 from routes.owner import owner_bp
 from werkzeug.security import check_password_hash, generate_password_hash
+from profile_pictures import profile_bp
+from routes.my_pay import my_pay_bp
 
 
 if getattr(sys, "_MEIPASS", None):  # running as a packaged .exe
@@ -59,6 +61,8 @@ app.register_blueprint(employee_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(hr_bp)
 app.register_blueprint(owner_bp)
+app.register_blueprint(profile_bp)
+app.register_blueprint(my_pay_bp)
 
 ROLE_HOME = {"admin": "/admin", "hr": "/hr", "owner": "/owner", "employee": "/employee"}  # match your blueprint URLs
 
@@ -225,6 +229,7 @@ def api_login():
     return jsonify(success=True, redirect=ROLE_HOME.get(row["role"], "/"))
 
 ACCOUNT_ROLES = ("admin", "hr", "owner", "employee")
+NO_JOB_ROLES = ("admin", "owner")
 SEX_VALUES = ("Male", "Female")
 PERSON_NAME_RE = re.compile(r"^[^\W\d_]+(?:[ .'-][^\W\d_]+)*$", re.UNICODE)
 
@@ -344,7 +349,7 @@ def create_account():
     """Create an employee record and its login account in one transaction."""
     data = _json_object()
     role = _text(data, "role").lower()
-    emp = parse_employee_form(data, require_job=(role != "admin"))
+    emp = parse_employee_form(data, require_job=(role not in NO_JOB_ROLES))
     password = data.get("password") or ""
 
     if role not in ACCOUNT_ROLES:
@@ -427,7 +432,7 @@ def update_employee_profile(employee_id):
         # so they must be editable without one too.
         cur.execute("SELECT account_role FROM account WHERE employee_id = %s", (employee_id,))
         acct = cur.fetchone()
-        emp = parse_employee_form(data, require_job=not (acct and acct["account_role"] == "admin"))
+        emp = parse_employee_form(data, require_job=not (acct and acct["account_role"] in NO_JOB_ROLES))
 
         cur.execute(
             "SELECT 1 AS ok FROM employees WHERE email = %s AND employee_id <> %s",

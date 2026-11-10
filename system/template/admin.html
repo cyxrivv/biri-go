@@ -42,7 +42,7 @@
                 </button>
                 <div class="user-menu">
                     <button class="user-btn" id="user-btn" type="button" aria-haspopup="true" aria-expanded="false">
-                        <span class="avatar" id="avatar">–</span>
+                        <span class="avatar" id="avatar" data-profile-avatar>–</span>
                         <span class="who hide-sm"><strong id="header-name">Loading…</strong><small>Administrator</small></span>
                         <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
                     </button>
@@ -69,6 +69,7 @@
                         <li data-section="department" tabindex="0" role="button"><i class="fa-solid fa-sitemap" aria-hidden="true"></i>Department</li>
                         <li data-section="positions" tabindex="0" role="button"><i class="fa-solid fa-briefcase" aria-hidden="true"></i>Positions</li>
                         <li data-section="salaries" tabindex="0" role="button"><i class="fa-solid fa-wallet" aria-hidden="true"></i>Salaries</li>
+                        <li data-section="my-pay" tabindex="0" role="button"><i class="fa-solid fa-money-check-dollar" aria-hidden="true"></i>My Salary &amp; Payslips</li>
                         <li data-section="leaves" tabindex="0" role="button"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i>Leaves</li>
                         <li data-section="reports" tabindex="0" role="button"><i class="fa-solid fa-chart-column" aria-hidden="true"></i>Reports</li>
                         <li data-section="backup" tabindex="0" role="button"><i class="fa-solid fa-database" aria-hidden="true"></i>Backups</li>
@@ -245,6 +246,41 @@
                     </section>
                 </div>
 
+                <!-- My Salary & Payslips page (own pay only) -->
+                <div id="page-my-pay" class="page">
+                    <div class="dashboard-cards">
+                        <div class="card card-green">
+                            <h3>Monthly Salary</h3>
+                            <p id="mypay-salary">-</p>
+                            <i class="fa-solid fa-peso-sign card-icon"></i>
+                        </div>
+                        <div class="card card-blue">
+                            <h3>Latest Net Pay</h3>
+                            <p id="mypay-net">-</p>
+                            <i class="fa-solid fa-money-bill-wave card-icon"></i>
+                        </div>
+                        <div class="card card-orange">
+                            <h3>Latest Period</h3>
+                            <p id="mypay-period">-</p>
+                            <i class="fa-solid fa-calendar card-icon"></i>
+                        </div>
+                    </div>
+                    <section class="section">
+                        <div class="section-header">
+                            <h2>My Salary &amp; Payslips</h2>
+                            <span class="muted" id="mypay-note">Your payslip history</span>
+                        </div>
+                        <div class="table-container">
+                            <table id="mypay-table">
+                                <thead>
+                                    <tr><th>Period</th><th>Gross Pay</th><th>Deductions</th><th>Net Pay</th><th>Payslip</th></tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+
                 <!-- Leaves page -->
                 <div id="page-leaves" class="page">
                     <section class="section">
@@ -372,6 +408,19 @@
                         </div>
                         <div class="report-grid">
                             <div class="report-box settings-box">
+                                <h3>Profile Picture</h3>
+                                <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+                                    <img data-profile-img src="/statistics/images/default-avatar.png" alt="Your profile picture" width="96" height="96" style="border-radius:50%;object-fit:cover;">
+                                    <div>
+                                        <input type="file" id="profilePicInput" accept="image/png,image/jpeg,image/webp" hidden>
+                                        <button type="button" id="profilePicBtn" class="btn btn-primary"><i class="fa-solid fa-camera" aria-hidden="true"></i> Change photo</button>
+                                        <button type="button" id="profilePicRemove" class="btn btn-secondary" style="display:none;">Remove</button>
+                                        <p style="margin:8px 0 0;font-size:.85em;opacity:.7;">PNG, JPG or WEBP, up to 2 MB.</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="report-box settings-box">
                                 <h3>My Account</h3>
                                 <dl class="salary-info">
                                     <dt>Name</dt><dd id="set-name">-</dd>
@@ -468,7 +517,7 @@
                     <label id="acc-position-field">Position
                         <select id="acc-position" required></select>
                     </label>
-                    <label>Salary
+                    <label id="acc-salary-field">Salary
                         <input type="number" id="acc-salary" min="0" step="0.01">
                     </label>
                     <label>Password
@@ -605,6 +654,7 @@
 
     <div id="toast" class="toast" hidden></div>
 
+    <script src="/statistics/js/profile.js"></script>
     <script src="/statistics/js/admin.js"></script>
 </body>
 </html>

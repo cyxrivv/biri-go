@@ -239,12 +239,41 @@ function showSection(section) {
     if (section === "department") loadDepartments();
     if (section === "positions") loadPositions();
     if (section === "salaries") loadSalaries();
+    if (section === "my-pay") loadMyPay();
     if (section === "leaves") loadLeaves();
     if (section === "reports") loadReports();
     if (section === "backup") loadBackups();
     if (section === "setting") loadSettings();
 
     document.querySelector(".main-content").scrollTop = 0;
+}
+
+// ---------------------------------------------------------------- My salary & payslips (own pay only)
+function fmtPayPeriod(s) {
+    return s ? new Date(s + "T00:00:00").toLocaleDateString("en-PH", { month: "long", year: "numeric" }) : "-";
+}
+
+async function loadMyPay() {
+    const body = document.querySelector("#mypay-table tbody");
+    try {
+        const d = await api("/api/me/pay");
+        const latest = d.payslips[0];
+        setText("mypay-salary", d.salary == null ? "-" : peso(d.salary));
+        setText("mypay-net", latest ? peso(latest.net_pay) : "-");
+        setText("mypay-period", latest ? fmtPayPeriod(latest.pay_period) : "-");
+        setText("mypay-note", d.linked ? "Your payslip history"
+            : "No employee record is linked to your account, so there is no salary to show.");
+        body.innerHTML = d.payslips.map((p) => `<tr>
+            <td>${escapeHtml(fmtPayPeriod(p.pay_period))}</td>
+            <td>${peso(p.gross_pay)}</td>
+            <td>${peso(p.deductions)}</td>
+            <td>${peso(p.net_pay)}</td>
+            <td><a href="/me/payslips/${p.id}" target="_blank" rel="noopener">View</a> &middot;
+                <a href="/me/payslips/${p.id}?download=1">Download</a></td></tr>`).join("")
+            || `<tr><td colspan="5" class="muted">No payslips yet.</td></tr>`;
+    } catch (err) {
+        toast(err.message, "error");
+    }
 }
 
 // ---------------------------------------------------------------- Topbar (menu, bell, account)
@@ -437,9 +466,16 @@ function fillPositionSelect(deptSelect, posSelect, selectedId) {
 }
 
 function updateAccountRoleFields() {
-    const isAdmin = byId("acc-role").value === "admin";
-    byId("acc-department-field").hidden = isAdmin;
-    byId("acc-position-field").hidden = isAdmin;
+    const role = byId("acc-role").value;
+    const isAdmin = role === "admin";
+    const isOwner = role === "owner";
+
+    // Admin: no department/position. Owner: no department/position/salary.
+    byId("acc-department-field").hidden = isAdmin || isOwner;
+    byId("acc-position-field").hidden = isAdmin || isOwner;
+    byId("acc-salary-field").hidden = isOwner;
+
+    if (isOwner) byId("acc-salary").value = "";
 }
 
 // ---------------------------------------------------------------- Add Account
@@ -562,6 +598,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         const isAdmin = val("acc-role") === "admin";
+        const isOwner = val("acc-role") === "owner";
+        const noJobFields = isAdmin || isOwner;
         const payload = {
             first_name: val("acc-first"),
             middle_name: val("acc-middle"),
@@ -571,9 +609,9 @@ document.addEventListener("DOMContentLoaded", () => {
             birthday: val("acc-birthday"),
             email: val("acc-email"),
             phone: val("acc-phone"),
-            department_id: isAdmin ? null : val("acc-department"),
-            position_id: isAdmin ? null : val("acc-position"),
-            salary: val("acc-salary"),
+            department_id: noJobFields ? null : val("acc-department"),
+            position_id: noJobFields ? null : val("acc-position"),
+            salary: isOwner ? "" : val("acc-salary"),
             role: val("acc-role"),
             password: val("acc-password"),
         };

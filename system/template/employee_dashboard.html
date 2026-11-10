@@ -39,7 +39,7 @@
             </button>
             <div class="user-menu">
                 <button class="user-btn" id="user-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="user-menu">
-                    <span class="avatar" id="avatar" aria-hidden="true">–</span>
+                    <span class="avatar" id="avatar" data-profile-avatar aria-hidden="true">–</span>
                     <span class="who hide-sm"><strong id="header-name">Loading…</strong><small>Employee</small></span>
                     <i class="fas fa-chevron-down" aria-hidden="true"></i>
                 </button>
@@ -191,12 +191,18 @@
                     </div>
                 </div>
                 <div class="profile-top panel">
-                    <span class="avatar lg" id="profile-avatar" aria-hidden="true">–</span>
+                    <span class="avatar lg" id="profile-avatar" data-profile-avatar aria-hidden="true">–</span>
                     <div>
                         <strong id="profile-name">—</strong>
                         <p class="muted small"><span id="card-position">—</span> · <span id="card-department">—</span></p>
                     </div>
                     <span class="badge" id="card-status">—</span>
+                </div>
+                <div class="panel" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                    <input type="file" id="profilePicInput" accept="image/png,image/jpeg,image/webp" hidden>
+                    <button type="button" class="btn btn-primary" id="profilePicBtn"><i class="fas fa-camera" aria-hidden="true"></i> Change photo</button>
+                    <button type="button" class="btn btn-secondary btn-ghost" id="profilePicRemove" style="display:none;">Remove photo</button>
+                    <span class="muted small">PNG, JPG or WEBP, up to 2 MB.</span>
                 </div>
                 <div class="panel table-container">
                     <table><tbody id="profile-rows"></tbody></table>
@@ -329,6 +335,11 @@
             <label for="lv-start">From <input type="date" id="lv-start" required></label>
             <label for="lv-end">To <input type="date" id="lv-end" required></label>
         </div>
+        <div class="form-grid single">
+            <label for="lv-reason">Reason
+                <textarea id="lv-reason" rows="3" maxlength="500" placeholder="e.g. Family event, medical appointment" required></textarea>
+            </label>
+        </div>
         <p class="form-error" id="lv-error" role="alert" hidden></p>
         <div class="modal-actions btn-row end">
             <button class="btn btn-primary" type="submit" id="lv-submit">Send request</button>
@@ -359,6 +370,7 @@
 
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
+<script src="/statistics/js/profile.js"></script>
 <script src="/statistics/js/employee_dashboard.js"></script>
 </body>
 </html>

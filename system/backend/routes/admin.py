@@ -1,5 +1,6 @@
 import re
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 
 from flask import Blueprint, current_app, jsonify, request, session
 
@@ -257,6 +258,60 @@ def delete_employee(employee_id):
         purge_employee(cur, employee_id)
         log_activity(cur, f"Deleted employee {emp['name']}")
     return jsonify(message="Employee deleted.")
+
+
+# --------------------------------------------------------------------------
+# Salaries (admin page: list everyone, edit one salary)
+# --------------------------------------------------------------------------
+@admin_bp.get("/api/salaries")
+@role_required("admin")
+def list_salaries():
+    rows = fetch_all(
+        """
+        SELECT e.employee_id AS id,
+               CONCAT_WS(' ', e.first_name, e.middle_name, e.last_name) AS name,
+               d.dept_name AS department, p.title AS position,
+               e.stat AS status, e.salary
+        FROM employees e
+        LEFT JOIN departments d ON d.department_id = e.department_id
+        LEFT JOIN positions p ON p.position_id = e.position_id
+        ORDER BY e.employee_id
+        """
+    )
+    for r in rows:
+        r["salary"] = float(r["salary"]) if r["salary"] is not None else None
+    active = [r["salary"] for r in rows if r["status"] == "Active" and r["salary"] is not None]
+    return jsonify(
+        summary={
+            "total_monthly": sum(active),
+            "average": (sum(active) / len(active)) if active else 0,
+            "highest": max(active) if active else 0,
+        },
+        items=rows,
+    )
+
+
+@admin_bp.put("/api/salaries/<int:employee_id>")
+@role_required("admin")
+def update_salary(employee_id):
+    data = json_body()
+    try:
+        amount = Decimal(str(data.get("salary")).strip())
+    except (InvalidOperation, AttributeError):
+        raise ApiError("Enter a valid salary.")
+    if not amount.is_finite() or amount < 0 or amount >= 100000000:
+        raise ApiError("Enter a valid salary between 0 and 99,999,999.99.")
+    emp = fetch_one(
+        "SELECT CONCAT_WS(' ', first_name, last_name) AS name FROM employees WHERE employee_id = %s",
+        (employee_id,),
+    )
+    if not emp:
+        raise ApiError("Employee not found.", 404)
+    with db() as (_, cur):
+        cur.execute("UPDATE employees SET salary = %s WHERE employee_id = %s",
+                    (amount.quantize(Decimal("0.01")), employee_id))
+        log_activity(cur, f"Updated salary for {emp['name']}")
+    return jsonify(message="Salary updated.")
 
 
 # --------------------------------------------------------------------------
