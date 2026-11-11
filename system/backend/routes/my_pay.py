@@ -8,7 +8,7 @@ from functools import wraps
 
 from flask import Blueprint, jsonify, session
 
-from db import fetch_all, fetch_one
+from db import db, fetch_all, fetch_one
 from utils import ApiError
 from routes.employee import _date, _money, render_payslip
 
@@ -31,7 +31,9 @@ def _pay_roles_only(fn):
 def _linked_employee_id():
     """employee_id of the signed-in account, or None if the account has no employee record."""
     row = fetch_one(
-        "SELECT employee_id FROM account WHERE account_id = %s",
+        "SELECT a.employee_id FROM account a "
+        "JOIN employees e ON e.employee_id = a.employee_id "
+        "WHERE a.account_id = %s",
         (session.get("account_id"),),
     )
     return row["employee_id"] if row else None
@@ -54,7 +56,9 @@ def my_pay():
         (emp_id,),
     )
     payslips = fetch_all(
-        "SELECT payroll_id AS id, pay_period, gross_pay, deductions, net_pay FROM payroll "
+        "SELECT payroll_id AS id, pay_period, gross_pay, deductions, net_pay, "
+        "(hr_confirmed_at IS NOT NULL) AS hr_confirmed, "
+        "(employee_confirmed_at IS NOT NULL) AS employee_confirmed FROM payroll "
         "WHERE employee_id = %s ORDER BY pay_period DESC, payroll_id DESC LIMIT 24",
         (emp_id,),
     )
@@ -70,6 +74,35 @@ def my_pay():
         department=emp["department"] if emp else None,
         payslips=payslips,
     )
+
+
+@my_pay_bp.post("/api/me/pay/<int:payroll_id>/confirm")
+@_pay_roles_only
+def confirm_my_payslip_receipt(payroll_id):
+    """Allow an employee-linked admin/HR/owner account to acknowledge its own pay."""
+    emp_id = _linked_employee_id()
+    if emp_id is None:
+        raise ApiError("No employee record is linked to this account.", 404)
+
+    row = fetch_one(
+        "SELECT hr_confirmed_at, employee_confirmed_at FROM payroll "
+        "WHERE payroll_id = %s AND employee_id = %s",
+        (payroll_id, emp_id),
+    )
+    if not row:
+        raise ApiError("Payroll record not found.", 404)
+    if row["hr_confirmed_at"] is None:
+        raise ApiError("HR must confirm payment before you can acknowledge receipt.", 409)
+    if row["employee_confirmed_at"] is not None:
+        return jsonify(message="You have already confirmed receipt.")
+
+    with db() as (_, cur):
+        cur.execute(
+            "UPDATE payroll SET employee_confirmed_at = CURRENT_TIMESTAMP "
+            "WHERE payroll_id = %s AND employee_id = %s AND employee_confirmed_at IS NULL",
+            (payroll_id, emp_id),
+        )
+    return jsonify(message="Receipt confirmed. Your official payslip is now available.")
 
 
 @my_pay_bp.get("/me/payslips/<int:payroll_id>")

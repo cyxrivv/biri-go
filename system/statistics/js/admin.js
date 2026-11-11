@@ -265,14 +265,39 @@ async function loadMyPay() {
         setText("mypay-period", latest ? fmtPayPeriod(latest.pay_period) : "-");
         setText("mypay-note", d.linked ? "Your payslip history"
             : "No employee record is linked to your account, so there is no salary to show.");
-        body.innerHTML = d.payslips.map((p) => `<tr>
-            <td>${escapeHtml(fmtPayPeriod(p.pay_period))}</td>
-            <td>${peso(p.gross_pay)}</td>
-            <td>${peso(p.deductions)}</td>
-            <td>${peso(p.net_pay)}</td>
-            <td><a href="/me/payslips/${p.id}" target="_blank" rel="noopener">View</a> &middot;
-                <a href="/me/payslips/${p.id}?download=1">Download</a></td></tr>`).join("")
-            || `<tr><td colspan="5" class="muted">No payslips yet.</td></tr>`;
+        body.innerHTML = d.payslips.map((p) => {
+            const confirmation = !p.hr_confirmed
+                ? "Awaiting HR payment confirmation"
+                : p.employee_confirmed
+                    ? "Receipt confirmed"
+                    : '<button type="button" class="btn btn-secondary" data-confirm-payroll="' + p.id + '">Confirm receipt</button>';
+            const actions = p.hr_confirmed && p.employee_confirmed
+                ? '<a href="/me/payslips/' + p.id + '" target="_blank" rel="noopener">View</a> &middot; ' +
+                  '<a href="/me/payslips/' + p.id + '?download=1">Download</a>'
+                : "Available after confirmation";
+            return '<tr><td>' + escapeHtml(fmtPayPeriod(p.pay_period)) + '</td>' +
+                '<td>' + peso(p.gross_pay) + '</td>' +
+                '<td>' + peso(p.deductions) + '</td>' +
+                '<td>' + peso(p.net_pay) + '</td>' +
+                '<td>' + confirmation + '</td><td>' + actions + '</td></tr>';
+        }).join("") || '<tr><td colspan="6" class="muted">No payslips yet.</td></tr>';
+
+        body.onclick = async (event) => {
+            const button = event.target.closest("[data-confirm-payroll]");
+            if (!button) return;
+            button.disabled = true;
+            try {
+                await api("/api/me/pay/" + button.dataset.confirmPayroll + "/confirm", {
+                    method: "POST",
+                    body: "{}"
+                });
+                toast("Receipt confirmed. Your payslip is now available.", "success");
+                await loadMyPay();
+            } catch (err) {
+                button.disabled = false;
+                toast(err.message, "error");
+            }
+        };
     } catch (err) {
         toast(err.message, "error");
     }
