@@ -171,8 +171,9 @@ const openModal = m => { m.hidden = false; const f = $("input,select,textarea,bu
 const closeModals = () => $$(".modal").forEach(m => { m.hidden = true; });
 
 let formHandler = null;
-function openForm(title, fields, onSubmit) {
+function openForm(title, fields, onSubmit, submit) {
     $("#form-title").textContent = title;
+    $("#form-submit").innerHTML = `<i class="fas fa-${esc((submit && submit.icon) || "floppy-disk")}"></i> ${esc((submit && submit.label) || "Save")}`;
     $("#form-error").hidden = true;
     $("#form-fields").innerHTML = fields.map(f => {
         const v = f.value ?? "", req = f.required ? " required" : "", id = "ff-" + f.name;
@@ -287,6 +288,7 @@ function addMinutes(hhmm, n) { const [h, m] = hhmm.split(":").map(Number); const
 
 function editRecord(res, rec, preset) {
     const def = formDefs[res](rec || preset);
+    const asRequest = res === "employees" && !rec?.id;
     openForm(def.title, def.fields, async v => {
         if (def.check) def.check(v);
         if (res === "attendance" && !rec?.id) {
@@ -294,12 +296,12 @@ function editRecord(res, rec, preset) {
             if (dup) rec = dup;
         }
         const result = await save(res, { ...(rec ? {} : def.defaults), ...v }, rec?.id);
-        closeModals(); renderAll(); toast("Saved.");
-        if (res === "employees" && result && result.temp_password) {
+        closeModals(); renderAll(); toast(asRequest ? "Request sent to admin." : "Saved.");
+        if (!asRequest && res === "employees" && result && result.temp_password) {
             openView("Employee created", `<p>Share these login details with the employee. The password is shown only once.</p>
                 <dl class="detail-list"><dt>Employee ID</dt><dd>${esc(result.code)}</dd><dt>Temporary password</dt><dd>${esc(result.temp_password)}</dd></dl>`);
         }
-    });
+    }, asRequest ? { label: "Send request to admin", icon: "paper-plane" } : undefined);
 }
 
 /* ---------- renderers ---------- */
