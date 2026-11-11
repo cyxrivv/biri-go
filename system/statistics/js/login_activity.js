@@ -8,9 +8,50 @@
     const message = document.getElementById("login-activity-message");
     const refresh = document.getElementById("login-activity-refresh");
 
-    function cell(row, value) {
+    const responsiveStyle = document.createElement("style");
+    responsiveStyle.textContent = `
+        .login-activity-wrap { width: 100%; max-width: 100%; overflow-x: auto; }
+        #login-activity-table { width: 100%; border-collapse: collapse; table-layout: auto; }
+        #login-activity-table th, #login-activity-table td {
+            padding: 12px 14px;
+            vertical-align: top;
+            text-align: left;
+        }
+        #login-activity-table th { white-space: nowrap; }
+        #login-activity-table td { overflow-wrap: anywhere; }
+        @media (max-width: 640px) {
+            .login-activity-wrap { overflow: visible; }
+            #login-activity-table, #login-activity-table tbody { display: block; width: 100%; }
+            #login-activity-table thead {
+                position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+                overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+            }
+            #login-activity-table tbody { display: grid; gap: 10px; }
+            #login-activity-table tbody tr {
+                display: block; padding: 6px 12px; border: 1px solid #dce3e8;
+                border-radius: 10px; background: #fff;
+            }
+            #login-activity-table tbody td {
+                display: grid; grid-template-columns: minmax(105px, 38%) minmax(0, 1fr);
+                gap: 10px; padding: 9px 0; border: 0; border-bottom: 1px solid #edf0f2;
+                text-align: left; overflow-wrap: anywhere;
+            }
+            #login-activity-table tbody td:last-child { border-bottom: 0; }
+            #login-activity-table tbody td::before {
+                content: attr(data-label); color: #64748b; font-weight: 600;
+            }
+            #login-activity-table tbody td[colspan] { display: block; border: 0; }
+            #login-activity-table tbody td[colspan]::before { content: none; }
+        }
+    `;
+    document.head.appendChild(responsiveStyle);
+    const tableWrap = table.closest(".table-container, .table-wrap");
+    if (tableWrap) tableWrap.classList.add("login-activity-wrap");
+
+    function cell(row, value, label) {
         const td = document.createElement("td");
         td.textContent = value == null || value === "" ? "—" : String(value);
+        td.dataset.label = label;
         row.appendChild(td);
     }
 
@@ -42,15 +83,15 @@
         items.forEach((item) => {
             const row = document.createElement("tr");
             if (canViewAll) {
-                cell(row, item.account_code || (item.account_id ? "Account #" + item.account_id : "Unknown account"));
-                cell(row, item.account_role);
+                cell(row, item.account_code || (item.account_id ? "Account #" + item.account_id : "Unknown account"), "Account ID");
+                cell(row, item.account_role, "Role");
             }
-            cell(row, item.event_type);
-            cell(row, item.status);
-            cell(row, item.ip_address);
-            cell(row, item.user_agent);
+            cell(row, item.event_type, "Activity");
+            cell(row, item.status, "Status");
+            cell(row, item.ip_address, "IP Address");
+            cell(row, item.user_agent, "Device / Browser");
             const date = item.created_at ? new Date(item.created_at) : null;
-            cell(row, date && !Number.isNaN(date.getTime()) ? date.toLocaleString() : item.created_at);
+            cell(row, date && !Number.isNaN(date.getTime()) ? date.toLocaleString() : item.created_at, "Date & Time");
             body.appendChild(row);
         });
     }
