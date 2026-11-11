@@ -1183,3 +1183,62 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 });
+
+// Biri_Go admin - animation helpers
+// Load AFTER admin.js:  <script src="/statistics/js/animations.js"></script>
+(function () {
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    // 1. Count-up for numeric stats (dashboard cards, reports).
+    //    Wraps the existing setText() so admin.js needs no changes.
+    const originalSetText = window.setText;
+    const running = new WeakMap();
+
+    window.setText = function (id, value) {
+        const el = document.getElementById(id);
+        const isWholeNumber = value !== null && value !== "" && /^\d+$/.test(String(value));
+        if (!el || reduce || !isWholeNumber || !el.closest(".card")) {
+            return originalSetText(id, value);
+        }
+
+        const from = parseInt(el.textContent, 10) || 0;
+        const to = parseInt(value, 10);
+        if (from === to) return originalSetText(id, value);
+
+        cancelAnimationFrame(running.get(el));
+        const duration = 700;
+        const start = performance.now();
+        const tick = (now) => {
+            const t = Math.min((now - start) / duration, 1);
+            const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic
+            el.textContent = Math.round(from + (to - from) * eased);
+            if (t < 1) running.set(el, requestAnimationFrame(tick));
+        };
+        running.set(el, requestAnimationFrame(tick));
+    };
+
+    // 2. Ripple on every .btn click.
+    document.addEventListener("click", (ev) => {
+        if (reduce) return;
+        const btn = ev.target.closest(".btn");
+        if (!btn || btn.disabled) return;
+        const rect = btn.getBoundingClientRect();
+        const dot = document.createElement("span");
+        dot.className = "ripple";
+        dot.style.left = ev.clientX - rect.left + "px";
+        dot.style.top = ev.clientY - rect.top + "px";
+        btn.appendChild(dot);
+        dot.addEventListener("animationend", () => dot.remove());
+    });
+
+    // 3. Pop the hamburger icon when the sidebar opens/closes.
+    document.addEventListener("DOMContentLoaded", () => {
+        const toggle = document.getElementById("menu-toggle");
+        if (!toggle) return;
+        toggle.addEventListener("click", () => {
+            toggle.classList.remove("pop");
+            void toggle.offsetWidth; // restart the animation
+            toggle.classList.add("pop");
+        });
+    });
+})();
