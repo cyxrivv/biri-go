@@ -10,7 +10,6 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-111111?style=flat-square&logo=python&logoColor=3776AB" alt="Python">
   <img src="https://img.shields.io/badge/Flask-111111?style=flat-square&logo=flask&logoColor=FFFFFF" alt="Flask">
-  <img src="https://img.shields.io/badge/MySQL_Server-111111?style=flat-square&logo=mysql&logoColor=4479A1" alt="MySQL Server">
   <img src="https://img.shields.io/badge/MySQL_Connector%2FPython-111111?style=flat-square&logo=mysql&logoColor=4479A1" alt="MySQL Connector/Python">
   <br>
   <img src="https://img.shields.io/badge/JavaScript-111111?style=flat-square&logo=javascript&logoColor=F7DF1E" alt="JavaScript">
