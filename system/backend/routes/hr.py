@@ -329,7 +329,7 @@ def _position_id(cur, dept_id, title):
 def _valid_person_name(value):
     value = str(value or "").strip()
     return bool(value) and all(
-        ch.isspace() or unicodedata.category(ch).startswith(("L", "M"))
+        ch == " " or unicodedata.category(ch).startswith(("L", "M"))
         for ch in value
     )
 
