@@ -51,6 +51,37 @@
     const tableWrap = table.closest(".table-container, .table-wrap");
     if (tableWrap) tableWrap.classList.add("login-activity-wrap");
 
+    function describeDevice(userAgent) {
+        const ua = String(userAgent || '');
+        if (!ua) return { summary: 'Unknown device', raw: '' };
+        const browsers = [
+            ['Opera', /(?:OPR|Opera)\/(\d+(?:\.\d+)?)/],
+            ['Edge', /Edg(?:e|A|iOS)?\/(\d+(?:\.\d+)?)/],
+            ['Samsung Internet', /SamsungBrowser\/(\d+(?:\.\d+)?)/],
+            ['Firefox', /(?:Firefox|FxiOS)\/(\d+(?:\.\d+)?)/],
+            ['Chrome', /(?:Chrome|CriOS)\/(\d+(?:\.\d+)?)/],
+            ['Safari', /Version\/(\d+(?:\.\d+)?).*Safari\//]
+        ];
+        let browser = 'Unknown browser';
+        let version = '';
+        for (const entry of browsers) {
+            const match = ua.match(entry[1]);
+            if (match) { browser = entry[0]; version = match[1]; break; }
+        }
+        let os = 'Unknown OS';
+        if (/Windows NT 10\.0/i.test(ua)) os = 'Windows 10/11';
+        else if (/Windows NT 6\.3/i.test(ua)) os = 'Windows 8.1';
+        else if (/Windows NT 6\.2/i.test(ua)) os = 'Windows 8';
+        else if (/Windows NT 6\.1/i.test(ua)) os = 'Windows 7';
+        else if (/Android/i.test(ua)) os = 'Android';
+        else if (/(iPhone|iPad|iPod)/i.test(ua)) os = 'iOS';
+        else if (/Mac OS X/i.test(ua)) os = 'macOS';
+        else if (/Linux/i.test(ua)) os = 'Linux';
+        let device = 'Desktop';
+        if (/iPad|Tablet/i.test(ua) || (/Android/i.test(ua) && !/Mobile/i.test(ua))) device = 'Tablet';
+        else if (/Mobile|iPhone|iPod|Android/i.test(ua)) device = 'Mobile';
+        return { summary: browser + (version ? ' ' + version : '') + ' · ' + os + ' · ' + device, raw: ua };
+    }
     function cell(row, value, label) {
         const td = document.createElement("td");
         td.textContent = value == null || value === "" ? "—" : String(value);
@@ -92,7 +123,15 @@
             cell(row, item.event_type, "Activity");
             cell(row, item.status, "Status");
             cell(row, item.ip_address, "IP Address");
-            cell(row, item.user_agent, "Device / Browser");
+            const device = describeDevice(item.user_agent);
+            const deviceCell = document.createElement('td');
+            deviceCell.textContent = device.summary;
+            deviceCell.dataset.label = 'Device / Browser';
+            if (device.raw) {
+                deviceCell.title = 'Raw browser details: ' + device.raw;
+                deviceCell.setAttribute('aria-label', device.summary + '. Raw browser details are available in the tooltip.');
+            }
+            row.appendChild(deviceCell);
             const date = item.created_at ? new Date(item.created_at) : null;
             cell(row, date && !Number.isNaN(date.getTime()) ? date.toLocaleString() : item.created_at, "Date & Time");
             body.appendChild(row);
