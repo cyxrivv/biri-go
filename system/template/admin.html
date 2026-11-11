@@ -445,6 +445,20 @@
                                     </div>
                                 </form>
                             </div>
+
+                        </div>
+                        <div class="report-box settings-box login-activity-panel">
+                            <div class="section-header">
+                                <h3>Login Activity</h3>
+                                <button type="button" class="btn btn-secondary" id="login-activity-refresh">Refresh</button>
+                            </div>
+                            <p class="muted" id="login-activity-message" role="status">Loading login activity…</p>
+                            <div class="table-container login-activity-wrap">
+                                <table id="login-activity-table">
+                                    <thead><tr><th>Account ID</th><th>Role</th><th>Activity</th><th>Status</th><th>IP Address</th><th>Device / Browser</th><th>Date &amp; Time</th></tr></thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
                         </div>
                     </section>
                 </div>
@@ -648,5 +662,6 @@
     <script src="/statistics/js/profile.js"></script>
     <script src="/statistics/js/admin.js"></script>
     <script src="/statistics/js/animations.js"></script>
+    <script src="/statistics/js/login_activity.js" defer></script>
 </body>
 </html>
