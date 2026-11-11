@@ -171,8 +171,9 @@ const openModal = m => { m.hidden = false; const f = $("input,select,textarea,bu
 const closeModals = () => $$(".modal").forEach(m => { m.hidden = true; });
 
 let formHandler = null;
-function openForm(title, fields, onSubmit) {
+function openForm(title, fields, onSubmit, submit) {
     $("#form-title").textContent = title;
+    $("#form-submit").innerHTML = `<i class="fas fa-${esc((submit && submit.icon) || "floppy-disk")}"></i> ${esc((submit && submit.label) || "Save")}`;
     $("#form-error").hidden = true;
     $("#form-fields").innerHTML = fields.map(f => {
         const v = f.value ?? "", req = f.required ? " required" : "", id = "ff-" + f.name;
