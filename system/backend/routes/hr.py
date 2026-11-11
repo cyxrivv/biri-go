@@ -57,6 +57,15 @@ _DDL = [
     """CREATE TABLE IF NOT EXISTS hr_holidays (
         id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100) NOT NULL,
         holiday_date DATE NOT NULL) DEFAULT CHARSET=utf8mb4""",
+    """CREATE TABLE IF NOT EXISTS hr_employee_requests (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        first_name VARCHAR(50) NOT NULL, last_name VARCHAR(50) NOT NULL,
+        sex VARCHAR(10), birthday DATE, email VARCHAR(100) NOT NULL, phone VARCHAR(20),
+        department_id INT NOT NULL, position_id INT NOT NULL, salary DECIMAL(12,2) DEFAULT 0,
+        hired DATE, emp_type VARCHAR(20) DEFAULT 'Full-time', emp_status VARCHAR(20) DEFAULT 'Active',
+        status VARCHAR(20) NOT NULL DEFAULT 'Pending',
+        requested_by INT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        reviewed_by INT NULL, reviewed_at DATETIME NULL, review_note VARCHAR(255) NULL) DEFAULT CHARSET=utf8mb4""",
     """CREATE TABLE IF NOT EXISTS hr_settings (
         skey VARCHAR(50) PRIMARY KEY, svalue VARCHAR(100)) DEFAULT CHARSET=utf8mb4""",
 ]
@@ -370,11 +379,40 @@ def list_employees():
     return jsonify(rows)
 
 
+@hr_bp.route("/options", methods=["GET"])
+@role_required("hr")
+def employee_options():
+    """Departments and positions for the Add Employee dropdowns (same data the admin form uses)."""
+    with db() as (conn, cur):
+        cur.execute("SELECT department_id AS id, dept_name AS name FROM departments ORDER BY dept_name")
+        departments = [_clean(r) for r in cur.fetchall()]
+        cur.execute("SELECT position_id AS id, title, department_id FROM positions ORDER BY title")
+        positions = [_clean(r) for r in cur.fetchall()]
+    return jsonify(departments=departments, positions=positions)
+
+
+@hr_bp.route("/employee-requests", methods=["GET"])
+@role_required("hr")
+def list_employee_requests():
+    """The requests HR has sent to the admin, newest first."""
+    with db() as (conn, cur):
+        cur.execute(
+            "SELECT r.id, r.first_name, r.last_name, r.email, r.department_id, d.dept_name AS department, "
+            "       p.title AS position, r.status, r.review_note, r.created_at, r.reviewed_at "
+            "FROM hr_employee_requests r "
+            "LEFT JOIN departments d ON d.department_id = r.department_id "
+            "LEFT JOIN positions p ON p.position_id = r.position_id "
+            "ORDER BY r.id DESC"
+        )
+        rows = [_clean(r) for r in cur.fetchall()]
+    return jsonify(rows)
+
+
 @hr_bp.route("/employees", methods=["POST"])
 @role_required("hr")
 def create_employee():
+    """HR can't create accounts. This files a Pending request for the admin to approve."""
     e = _parse_employee(_body())
-    e["salary"] = float(e.get("salary") or 0)
     with db() as (conn, cur):
         cur.execute("SELECT 1 AS ok FROM employees WHERE email = %s", (e["email"],))
         if cur.fetchone():
@@ -382,38 +420,26 @@ def create_employee():
         cur.execute("SELECT 1 AS ok FROM account WHERE account_email = %s", (e["email"],))
         if cur.fetchone():
             raise ApiError("An account with that email already exists.", 409)
+        cur.execute("SELECT 1 AS ok FROM hr_employee_requests WHERE email = %s AND status = 'Pending'",
+                    (e["email"],))
+        if cur.fetchone():
+            raise ApiError("A request for that email is already waiting for the admin.", 409)
         _need_department(cur, e["dept_id"])
-        pos_id = _position_id(cur, e["dept_id"], e["position"])
-
+        cur.execute("SELECT position_id FROM positions WHERE department_id = %s AND title = %s",
+                    (e["dept_id"], e["position"]))
+        pos = cur.fetchone()
+        if not pos:
+            raise ApiError("Please choose a position from the list for that department.")
         cur.execute(
-            "INSERT INTO employees (first_name, middle_name, last_name, suffix, sex, birthday, email, phone, "
-            "stat, salary, department_id, position_id, hired, emp_type) "
-            "VALUES (%s, NULL, %s, NULL, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-            (
-                e["first"], e["last"], e["sex"], e["birthday"],
-                e["email"], e["phone"], e["status"], e["salary"],
-                e["dept_id"], pos_id, e["hired"], e["type"]
-            ),
+            "INSERT INTO hr_employee_requests (first_name, last_name, sex, birthday, email, phone, "
+            "department_id, position_id, salary, hired, emp_type, emp_status, status, requested_by) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'Pending', %s)",
+            (e["first"], e["last"], e["sex"], e["birthday"], e["email"], e["phone"], e["dept_id"],
+             pos["position_id"], e["salary"], e["hired"], e["type"], e["status"], session.get("account_id")),
         )
-        emp_id = cur.lastrowid
-
-        code = None
-        for _ in range(20):
-            c = "biri-%06d" % secrets.randbelow(1_000_000)
-            cur.execute("SELECT 1 AS ok FROM account WHERE employee_code = %s", (c,))
-            if not cur.fetchone():
-                code = c
-                break
-        if not code:
-            raise ApiError("Could not generate a unique employee ID. Please try again.", 500)
-        temp_password = secrets.token_urlsafe(8)
-        cur.execute(
-            "INSERT INTO account (employee_code, employee_id, account_email, account_password, account_role) "
-            "VALUES (%s, %s, %s, %s, 'employee')",
-            (code, emp_id, e["email"], generate_password_hash(temp_password)),
-        )
-        log_activity(cur, "HR added employee %s %s" % (e["first"], e["last"]))
-    return jsonify(id=emp_id, code=code, temp_password=temp_password), 201
+        req_id = cur.lastrowid
+        log_activity(cur, "HR requested new employee %s %s (request #%s)" % (e["first"], e["last"], req_id))
+    return jsonify(id=req_id, status="Pending", message="Request sent to admin."), 201
 
 
 @hr_bp.route("/employees/<int:emp_id>", methods=["PUT"])

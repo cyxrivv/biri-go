@@ -29,6 +29,13 @@ CREATE TABLE IF NOT EXISTS employee_documents (
 );
 """
 
+
+def init_documents_table():
+    """Create the employee_documents table if it doesn't exist yet."""
+    with db() as (conn, cur):
+        cur.execute(CREATE_TABLE_SQL)
+        conn.commit()
+
 UPLOAD_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads", "employee_documents")
 ALLOWED = {
     "pdf": "application/pdf",

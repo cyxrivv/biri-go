@@ -60,7 +60,7 @@ const RES = ["employees", "departments", "jobs", "applicants", "processes", "att
 
     "leaves", "reviews", "trainings", "announcements", "holidays", "payroll"];
 
-const S = { settings: {} };
+const S = { settings: {}, options: { departments: [], positions: [] } };
 
 let DEMO = false;
 
@@ -202,6 +202,8 @@ async function demoCall(method, path, body) {
 
     const [res, id] = path.split("/");
 
+    if (res === "options") return { positions: (mem.departments || []).flatMap(d => ["Associate", "Specialist", "Supervisor", "Analyst"].map((t, k) => ({ id: d.id * 10 + k, title: t, department_id: d.id }))) };
+
     if (res === "settings") { if (method === "PUT") Object.assign(mem.settings, body); return { ...mem.settings }; }
 
     const list = mem[res];
@@ -232,11 +234,11 @@ const call = (method, path, body) => DEMO
 
 async function load(...names) {
 
-    await Promise.all((names.length ? names : [...RES, "settings"]).map(async r => {
+    await Promise.all((names.length ? names : [...RES, "settings", "options"]).map(async r => {
 
         const d = await call("GET", r);
 
-        S[r] = r === "settings" ? d : (Array.isArray(d) ? d : d.items || []);
+        S[r] = (r === "settings" || r === "options") ? d : (Array.isArray(d) ? d : d.items || []);
 
     }));
 
@@ -274,6 +276,10 @@ const empOpts = (activeOnly = true) => S.employees.filter(e => !activeOnly || e.
 
 const deptOpts = () => S.departments.map(d => ({ v: d.id, l: d.name }));
 
+const posOpts = deptId => ((S.options && S.options.positions) || []).filter(p => String(p.department_id) === String(deptId))
+
+    .map(p => ({ v: p.title, l: p.title }));
+
 const onLeaveOn = date => S.leaves.filter(l => l.status === "Approved" && l.from <= date && l.to >= date);
 
 // These helpers create HTML, so every value that can reach an attribute or text node
@@ -307,9 +313,11 @@ const closeModals = () => $$(".modal").forEach(m => { m.hidden = true; });
 
 let formHandler = null;
 
-function openForm(title, fields, onSubmit) {
+function openForm(title, fields, onSubmit, submit) {
 
     $("#form-title").textContent = title;
+
+    $("#form-submit").innerHTML = `<i class="fas fa-${esc((submit && submit.icon) || "floppy-disk")}"></i> ${esc((submit && submit.label) || "Save")}`;
 
     $("#form-error").hidden = true;
 
@@ -342,6 +350,31 @@ function openForm(title, fields, onSubmit) {
         return `<label class="${f.full ? "full" : ""}">${esc(f.label)}${f.required ? " *" : ""} ${input}</label>`;
 
     }).join("");
+
+    // Fields with dependsOn (e.g. Position) rebuild their options when the parent select (Department) changes.
+    fields.filter(f => f.dependsOn).forEach(f => {
+
+        const parent = $("#ff-" + f.dependsOn), sel = $("#ff-" + f.name);
+
+        const refill = keep => {
+
+            const opts = f.optionsFor(parent.value);
+
+            if (keep && !opts.some(o => String(o.v) === String(keep))) opts.unshift({ v: keep, l: keep });
+
+            sel.innerHTML = `<option value="">${esc(f.blank || "Select")}</option>` +
+
+                opts.map(o => `<option value="${esc(o.v)}">${esc(o.l)}</option>`).join("");
+
+            sel.value = keep || "";
+
+        };
+
+        refill(f.value ?? "");
+
+        parent.addEventListener("change", () => refill(""));
+
+    });
 
     formHandler = async () => {
 
@@ -393,7 +426,7 @@ const formDefs = {
 
         { name: "department_id", label: "Department", type: "select", options: deptOpts(), num: true, required: true, value: r?.department_id },
 
-        { name: "position", label: "Position", required: true, value: r?.position },
+        { name: "position", label: "Position", type: "select", options: [], blank: "Select position", dependsOn: "department_id", optionsFor: posOpts, required: true, value: r?.position },
 
         { name: "salary", label: "Monthly Salary (₱)", type: "number", min: 0, step: "0.01", required: true, value: r?.salary ?? 0 },
 
@@ -539,6 +572,8 @@ function editRecord(res, rec, preset) {
 
     const def = formDefs[res](rec || preset);
 
+    const asRequest = res === "employees" && !rec?.id;   // HR files a request; the admin creates the account
+
     openForm(def.title, def.fields, async v => {
 
         if (def.check) def.check(v);
@@ -553,17 +588,9 @@ function editRecord(res, rec, preset) {
 
         const result = await save(res, { ...(rec ? {} : def.defaults), ...v }, rec?.id);
 
-        closeModals(); renderAll(); toast("Saved.");
+        closeModals(); renderAll(); toast(asRequest ? "Request sent to admin." : "Saved.");
 
-        if (res === "employees" && result && result.temp_password) {
-
-            openView("Employee created", `<p>Share these login details with the employee. The password is shown only once.</p>
-
-                <dl class="detail-list"><dt>Employee ID</dt><dd>${esc(result.code)}</dd><dt>Temporary password</dt><dd>${esc(result.temp_password)}</dd></dl>`);
-
-        }
-
-    });
+    }, asRequest ? { label: "Send request to admin", icon: "paper-plane" } : undefined);
 
 }
 
@@ -801,7 +828,7 @@ function renderLeaves() {
 
     $("#leaves-table tbody").innerHTML = L.filter(l => (!fs || l.status === fs) && (!ft || l.type === ft)).sort((a, b) => b.from.localeCompare(a.from)).map(l => `<tr>
 
-        <td>${l.id}</td><td>${esc(empName(l.employee_id))}</td><td>${esc(l.type)}</td><td>${fmtDate(l.from)}</td><td>${fmtDate(l.to)}</td><td class="num">${l.days}</td>
+        <td>${esc((emp(l.employee_id) || {}).code || l.employee_id)}</td><td>${esc(empName(l.employee_id))}</td><td>${esc(l.type)}</td><td>${fmtDate(l.from)}</td><td>${fmtDate(l.to)}</td><td class="num">${l.days}</td>
 
         <td>${esc(l.reason)}</td><td>${badge(l.status)}</td><td>${l.status === "Pending" ? btn("leave-approve", l.id, "check", "Approve", "btn-primary") + " " + btn("leave-reject", l.id, "xmark", "Reject") + " " : ""}
 

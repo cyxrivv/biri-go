@@ -66,6 +66,7 @@
                     <ul>
                         <li class="active" data-section="dashboard" tabindex="0" role="button"><i class="fa-solid fa-table-cells-large" aria-hidden="true"></i>Dashboard</li>
                         <li data-section="employees" tabindex="0" role="button"><i class="fa-solid fa-user-group" aria-hidden="true"></i>Employees</li>
+                        <li data-section="requests" tabindex="0" role="button"><i class="fa-solid fa-user-plus" aria-hidden="true"></i>Employee Requests <span id="requests-badge" style="display:none;width:8px;height:8px;border-radius:50%;background:#e53935;margin-left:6px;vertical-align:middle"></span></li>
                         <li data-section="department" tabindex="0" role="button"><i class="fa-solid fa-sitemap" aria-hidden="true"></i>Department</li>
                         <li data-section="positions" tabindex="0" role="button"><i class="fa-solid fa-briefcase" aria-hidden="true"></i>Positions</li>
                         <li data-section="salaries" tabindex="0" role="button"><i class="fa-solid fa-wallet" aria-hidden="true"></i>Salaries</li>
@@ -274,6 +275,31 @@
                             <table id="mypay-table">
                                 <thead>
                                     <tr><th>Period</th><th>Gross Pay</th><th>Deductions</th><th>Net Pay</th><th>Payslip</th></tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Employee requests page (sent by HR) -->
+                <div id="page-requests" class="page">
+                    <section class="section">
+                        <div class="section-header">
+                            <h2>Employee Requests</h2>
+                            <div class="section-actions">
+                                <select id="request-filter" aria-label="Filter by status">
+                                    <option value="">All statuses</option>
+                                    <option value="Pending" selected>Pending</option>
+                                    <option value="Approved">Approved</option>
+                                    <option value="Rejected">Rejected</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="table-container">
+                            <table id="requests-table">
+                                <thead>
+                                    <tr><th>ID</th><th>Name</th><th>Email</th><th>Department</th><th>Position</th><th>Salary</th><th>Sent</th><th>Status</th><th>Actions</th></tr>
                                 </thead>
                                 <tbody></tbody>
                             </table>
