@@ -13,7 +13,7 @@ const minimumAdultBirthday = () => {
     const day = Math.min(d.getDate(), new Date(year, month + 1, 0).getDate());
     return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 };
-const isLettersAndSpaces = value => /^[\p{L}\p{M}]+(?:\s+[\p{L}\p{M}]+)*$/u.test(String(value || "").trim());
+const isLettersAndSpaces = value => /^[\p{L}\p{M}]+(?: +[\p{L}\p{M}]+)*$/u.test(String(value || "").trim());
 const addDays = (s, n) => { const d = new Date(s + "T00:00:00"); d.setDate(d.getDate() + n); return iso(d); };
 const fmtDate = s => s ? new Date(s + "T00:00:00").toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "-";
 const daysBetween = (a, b) => Math.round((new Date(b + "T00:00:00") - new Date(a + "T00:00:00")) / 864e5) + 1;
@@ -203,7 +203,7 @@ function openForm(title, fields, onSubmit, submit) {
         ["first_name", "last_name"].forEach(name => {
             const input = $("#ff-" + name);
             if (input) input.addEventListener("input", () => {
-                input.value = input.value.replace(/[^\p{L}\p{M}\s]/gu, "");
+                input.value = input.value.replace(/[^\p{L}\p{M} ]/gu, "");
             });
         });
         const phoneInput = $("#ff-phone");
