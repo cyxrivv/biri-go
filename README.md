@@ -37,7 +37,7 @@ Create the `biri_go` database and load the base schema (`Biri-Go.sql`):
 mysql -u root -p < Biri-Go.sql
 ```
 
-> The core tables (`account`, `employees`, `departments`, `positions`, `leave_requests`, `attendance`) come from `Biri-Go.sql`. The app creates and upgrades the remaining tables (payroll, activity log, HR tables) on startup when `DB_AUTO_INIT=1`, which is the default in development.
+> The core tables (`account`, `employees`, `departments`, `positions`, `leave_requests`, `attendance`) come from `Biri-Go.sql`. The app creates and upgrades the remaining tables (payroll, activity log, HR tables) on startup when `DB_AUTO_INIT=1`, which is the default in development. The login activity table is also created automatically in development; production deployments must apply `system/backend/migrations/20261111_login_activity.sql` before enabling the feature.
 
 ### 3. Configure environment variables
 
@@ -67,6 +67,7 @@ On the first run against an empty database, the console prints a one-time passwo
 - **Reports and activity log:** Company reports for admin, HR, and the owner, and an activity log of key actions.
 - **Backup and restore:** Create, verify, restore, and delete compressed database backups from the Admin portal or the command line. Restoring takes a safety backup first when possible.
 - **Profiles:** Every user can view their profile, upload a profile picture (validated and resized to 256×256), and change their password.
+- **Login activity:** Record successful, failed, blocked, and logout events with account ID, role, timestamp, IP address, and browser/device details. Employees, HR, and regular admins see only their own events; the owner and system admin account (`biri-000000`) can review all events.
 - **Security by default:** Hashed passwords, CSRF tokens on every write request, JSON-only write endpoints, login rate limiting, a strict Content-Security-Policy, and a production mode that refuses to start with unsafe settings.
 - **Desktop app:** Wrap the app in a native window with `pywebview` and package it into an `.exe` with PyInstaller.
 
