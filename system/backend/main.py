@@ -209,24 +209,28 @@ def hr_page():
 def _record_login_event(account_id=None, account_code=None, account_role=None,
                         event_type="LOGIN", status="SUCCESS"):
     """Store a minimal authentication event; never store credentials or session data."""
-    with db() as (_, cur):
-        cur.execute(
-            """
-            INSERT INTO login_logs
-                (account_id, account_code, account_role, event_type, status,
-                 ip_address, user_agent)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """,
-            (
-                account_id,
-                (account_code or "")[:50] or None,
-                (account_role or "")[:30] or None,
-                event_type[:20],
-                status[:20],
-                (request.remote_addr or "")[:45] or None,
-                (request.user_agent.string or "")[:512] or None,
-            ),
-        )
+    try:
+        with db() as (_, cur):
+            cur.execute(
+                """
+                INSERT INTO login_logs
+                    (account_id, account_code, account_role, event_type, status,
+                     ip_address, user_agent)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    account_id,
+                    (account_code or "")[:50] or None,
+                    (account_role or "")[:30] or None,
+                    event_type[:20],
+                    status[:20],
+                    (request.remote_addr or "")[:45] or None,
+                    (request.user_agent.string or "")[:512] or None,
+                ),
+            )
+    except mysql.connector.Error:
+        # An audit-table problem must not lock legitimate users out of the app.
+        app.logger.exception("Could not record login activity.")
 
 
 @app.route("/api/login-activity")
@@ -306,6 +310,11 @@ def api_login():
 
     throttle_key = f"{request.remote_addr}|{code}"
     if _too_many_attempts(throttle_key):
+        _record_login_event(
+            account_code=code[:50],
+            event_type="LOGIN",
+            status="BLOCKED",
+        )
         return jsonify(success=False, message="Too many failed attempts. Try again in a few minutes."), 429
 
     with db() as (conn, cur):
