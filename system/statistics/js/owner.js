@@ -470,3 +470,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     renderAll();
     route();
 });
+
+document.addEventListener("click", e => {
+    const b = e.target.closest(".btn");
+    if (!b) return;
+    const r = b.getBoundingClientRect(), s = document.createElement("span");
+    s.className = "ripple";
+    s.style.left = (e.clientX - r.left) + "px";
+    s.style.top = (e.clientY - r.top) + "px";
+    b.appendChild(s);
+    setTimeout(() => s.remove(), 600);
+});

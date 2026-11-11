@@ -7,6 +7,7 @@
     <meta name="robots" content="noindex, nofollow">
     <meta name="csrf-token" content="{{ csrf_token }}">
     <title>Dashboard | HR | Biri-Go</title>
+    <link rel="icon" type="image/png" href="/statistics/assets/logo.png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <link rel="stylesheet" href="/statistics/css/hr.css">
 </head>
@@ -15,7 +16,11 @@
 
     <div class="container">
         <header class="topbar">
-            <a class="brand" href="#dashboard"><span class="brand-mark"><i class="fas fa-people-group" aria-hidden="true"></i></span><strong>Biri_Go</strong></a>
+            <a class="brand" href="#dashboard">
+                <span class="brand-mark"><img src="/statistics/assets/logo.png" alt="" width="40" height="40"></span>
+                <strong>Biri_Go</strong>
+            </a>
+
             <button type="button" id="menu-btn" class="icon-btn menu-btn" aria-label="Toggle menu" aria-controls="sidebar" aria-expanded="true"><i class="far fa-square-caret-left" aria-hidden="true"></i></button>
             <span class="portal">HR portal</span>
 
@@ -42,6 +47,7 @@
                         <span class="who hide-sm"><strong id="hr-name">Loading&hellip;</strong><small>Human Resources</small></span>
                         <i class="fas fa-chevron-down" aria-hidden="true"></i>
                     </button>
+
                     <div class="menu" id="user-menu" hidden>
                         <a href="#settings" class="menu-item"><i class="fas fa-gear" aria-hidden="true"></i> HR settings</a>
                         <form method="POST" action="/logout">
@@ -62,23 +68,27 @@
                     <ul>
                         <li><a href="#dashboard" data-section="dashboard"><i class="fas fa-gauge-high"></i>Dashboard</a></li>
                     </ul>
+
                     <p class="nav-title">People</p>
                     <ul>
                         <li><a href="#employees" data-section="employees"><i class="fas fa-users"></i>Employees</a></li>
                         <li><a href="#departments" data-section="departments"><i class="fas fa-building"></i>Departments</a></li>
                         <li><a href="#onboarding" data-section="onboarding"><i class="fas fa-clipboard-check"></i>Onboarding<span class="nav-count" id="nc-onboarding" hidden></span></a></li>
                     </ul>
+
                     <p class="nav-title">Talent</p>
                     <ul>
                         <li><a href="#recruitment" data-section="recruitment"><i class="fas fa-user-tie"></i>Recruitment<span class="nav-count" id="nc-recruitment" hidden></span></a></li>
                         <li><a href="#performance" data-section="performance"><i class="fas fa-star"></i>Performance</a></li>
                         <li><a href="#training" data-section="training"><i class="fas fa-graduation-cap"></i>Training</a></li>
                     </ul>
+
                     <p class="nav-title">Time &amp; Leave</p>
                     <ul>
                         <li><a href="#attendance" data-section="attendance"><i class="fas fa-clock"></i>Attendance</a></li>
                         <li><a href="#leaves" data-section="leaves"><i class="fas fa-calendar-check"></i>Leaves<span class="nav-count" id="nc-leaves" hidden></span></a></li>
                     </ul>
+
                     <p class="nav-title">Compensation</p>
                     <ul>
                         <li><a href="#payroll" data-section="payroll"><i class="fas fa-money-bill-wave"></i>Payroll</a></li>
@@ -99,7 +109,6 @@
                     <span><i class="fas fa-flask"></i> Demo mode: the server API was not reachable, so sample data is shown and changes are kept in memory only.</span>
                 </div>
 
-                <!-- ============ Dashboard ============ -->
                 <section id="page-dashboard" class="page active" aria-labelledby="h-dashboard">
                     <section class="hero">
                         <div>
@@ -114,6 +123,7 @@
                             <button type="button" class="btn btn-secondary" data-action="add-announcement"><i class="fas fa-bullhorn"></i> Announce</button>
                         </div>
                     </section>
+
                     <div class="dashboard-cards">
                         <a class="card card-blue" href="#employees"><h3>Total Employees</h3><p id="d-total">0</p><i class="fas fa-users card-icon"></i></a>
                         <a class="card card-green" href="#employees" data-quick="status:Active"><h3>Active</h3><p id="d-active">0</p><i class="fas fa-user-check card-icon"></i></a>
@@ -122,6 +132,7 @@
                         <a class="card card-pink" href="#recruitment" data-quick="board"><h3>New Applicants</h3><p id="d-applicants">0</p><i class="fas fa-file-lines card-icon"></i></a>
                         <a class="card card-orange" href="#leaves" data-quick="pending"><h3>Pending Leaves</h3><p id="d-pending">0</p><i class="fas fa-hourglass-half card-icon"></i></a>
                     </div>
+
                     <div class="hr-grid">
                         <section class="panel"><h3><i class="fas fa-calendar-check"></i> Leave Approvals</h3><ul class="list" id="dash-leaves"></ul></section>
                         <section class="panel"><h3><i class="fas fa-bullhorn"></i> Announcements</h3><ul class="list" id="dash-announcements"></ul></section>
@@ -132,7 +143,6 @@
                     </div>
                 </section>
 
-                <!-- ============ Employees ============ -->
                 <section id="page-employees" class="page" aria-labelledby="h-employees">
                     <div class="section-header">
                         <h2 id="h-employees"><i class="fas fa-users"></i> Employees</h2>
@@ -141,22 +151,23 @@
                             <button type="button" class="btn btn-primary" data-action="add-employee"><i class="fas fa-user-plus"></i> Add Employee</button>
                         </div>
                     </div>
+
                     <div class="filter-bar">
                         <label>Department <select id="f-emp-dept"></select></label>
                         <label>Status
                             <select id="f-emp-status"><option value="">All</option><option>Active</option><option>On Leave</option><option>Resigned</option><option>Terminated</option></select>
                         </label>
-                        <label>Type
-                            <select id="f-emp-type"></select>
-                        </label>
+                        <label>Type <select id="f-emp-type"></select></label>
                         <button type="button" class="btn btn-secondary" id="f-emp-reset">Reset</button>
                     </div>
+
                     <div class="table-container">
                         <table id="employees-table">
                             <thead><tr><th>Employee</th><th>ID</th><th>Department</th><th>Position</th><th>Type</th><th>Hired</th><th>Status</th><th>Actions</th></tr></thead>
                             <tbody></tbody>
                         </table>
                     </div>
+
                     <nav class="pagination" aria-label="Employees pagination">
                         <span id="emp-count" class="muted total"></span>
                         <button type="button" id="prev-page" class="btn btn-secondary btn-sm" aria-label="Previous page"><i class="fas fa-chevron-left"></i></button>
@@ -165,7 +176,6 @@
                     </nav>
                 </section>
 
-                <!-- ============ Recruitment ============ -->
                 <section id="page-recruitment" class="page" aria-labelledby="h-recruitment">
                     <div class="section-header">
                         <h2 id="h-recruitment"><i class="fas fa-user-tie"></i> Recruitment</h2>
@@ -174,14 +184,17 @@
                             <button type="button" class="btn btn-primary" data-action="add-applicant"><i class="fas fa-user-plus"></i> Add Applicant</button>
                         </div>
                     </div>
+
                     <div class="tabs" role="tablist" data-tabs="recruitment">
                         <button type="button" role="tab" class="tab active" data-tab="board">Pipeline</button>
                         <button type="button" role="tab" class="tab" data-tab="jobs">Job Openings</button>
                     </div>
+
                     <div class="tab-panel active" data-panel="recruitment:board">
                         <div class="filter-bar"><label>Job <select id="f-job"></select></label></div>
                         <div id="board" class="board"></div>
                     </div>
+
                     <div class="tab-panel" data-panel="recruitment:jobs">
                         <div class="table-container">
                             <table id="jobs-table">
@@ -192,7 +205,6 @@
                     </div>
                 </section>
 
-                <!-- ============ Onboarding ============ -->
                 <section id="page-onboarding" class="page" aria-labelledby="h-onboarding">
                     <div class="section-header">
                         <h2 id="h-onboarding"><i class="fas fa-clipboard-check"></i> Onboarding &amp; Offboarding</h2>
@@ -204,7 +216,6 @@
                     <div id="process-list" class="process-grid"></div>
                 </section>
 
-                <!-- ============ Attendance ============ -->
                 <section id="page-attendance" class="page" aria-labelledby="h-attendance">
                     <div class="section-header">
                         <h2 id="h-attendance"><i class="fas fa-clock"></i> Attendance</h2>
@@ -213,17 +224,20 @@
                             <button type="button" class="btn btn-primary" data-action="add-attendance"><i class="fas fa-plus"></i> Add / Correct Record</button>
                         </div>
                     </div>
+
                     <div class="dashboard-cards summary-cards">
                         <div class="card card-green"><h3>Present</h3><p id="a-present">0</p><i class="fas fa-user-check card-icon"></i></div>
                         <div class="card card-orange"><h3>Late</h3><p id="a-late">0</p><i class="fas fa-user-clock card-icon"></i></div>
                         <div class="card card-pink"><h3>Absent</h3><p id="a-absent">0</p><i class="fas fa-user-xmark card-icon"></i></div>
                         <div class="card card-blue"><h3>On Leave</h3><p id="a-leave">0</p><i class="fas fa-umbrella-beach card-icon"></i></div>
                     </div>
+
                     <div class="filter-bar">
                         <label>Date <input type="date" id="a-date"></label>
                         <label>Department <select id="a-dept"></select></label>
                         <button type="button" class="btn btn-secondary" id="a-today">Today</button>
                     </div>
+
                     <div class="table-container">
                         <table id="attendance-table">
                             <thead><tr><th>Employee</th><th>Department</th><th>Time In</th><th>Time Out</th><th class="num">Hours</th><th>Status</th><th>Remarks</th><th>Actions</th></tr></thead>
@@ -231,7 +245,7 @@
                         </table>
                     </div>
                 </section>
-                <!-- ============ Payroll ============ -->
+
                 <section id="page-payroll" class="page" aria-labelledby="h-payroll">
                     <div class="section-header">
                         <h2 id="h-payroll">
@@ -256,6 +270,7 @@
                             Allowances (₱)
                             <input type="number" id="payroll-allowances" min="0" step="0.01" value="0">
                         </label>
+
                         <label>
                             Other Deductions (₱)
                             <input type="number" id="payroll-manual-deductions" min="0" step="0.01" value="0">
@@ -284,7 +299,7 @@
                         </table>
                     </div>
                 </section>
-                <!-- ============ My Salary & Payslips ============ -->
+
                 <section id="page-my-pay" class="page" aria-labelledby="h-my-pay">
                     <div class="section-header">
                         <h2 id="h-my-pay"><i class="fas fa-wallet"></i> My Salary &amp; Payslips</h2>
@@ -314,7 +329,6 @@
                     </div>
                 </section>
 
-                <!-- ============ Leaves ============ -->
                 <section id="page-leaves" class="page" aria-labelledby="h-leaves">
                     <div class="section-header">
                         <h2 id="h-leaves"><i class="fas fa-calendar-check"></i> Leave Management</h2>
@@ -323,21 +337,25 @@
                             <button type="button" class="btn btn-primary" data-action="add-leave"><i class="fas fa-plus"></i> File Leave</button>
                         </div>
                     </div>
+
                     <div class="dashboard-cards summary-cards">
                         <div class="card card-orange"><h3>Pending</h3><p id="l-pending">0</p><i class="fas fa-hourglass-half card-icon"></i></div>
                         <div class="card card-green"><h3>Approved</h3><p id="l-approved">0</p><i class="fas fa-circle-check card-icon"></i></div>
                         <div class="card card-pink"><h3>Rejected</h3><p id="l-rejected">0</p><i class="fas fa-circle-xmark card-icon"></i></div>
                     </div>
+
                     <div class="tabs" role="tablist" data-tabs="leaves">
                         <button type="button" role="tab" class="tab active" data-tab="requests">Requests</button>
                         <button type="button" role="tab" class="tab" data-tab="balances">Leave Balances</button>
                         <button type="button" role="tab" class="tab" data-tab="calendar">Who's Out</button>
                     </div>
+
                     <div class="tab-panel active" data-panel="leaves:requests">
                         <div class="filter-bar">
                             <label>Status <select id="f-leave-status"><option value="">All</option><option>Pending</option><option>Approved</option><option>Rejected</option></select></label>
                             <label>Type <select id="f-leave-type"></select></label>
                         </div>
+
                         <div class="table-container">
                             <table id="leaves-table">
                                 <thead><tr><th>EMPLOYEE ID</th><th>Employee Name</th><th>Type</th><th>From</th><th>To</th><th class="num">Days</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead>
@@ -345,6 +363,7 @@
                             </table>
                         </div>
                     </div>
+
                     <div class="tab-panel" data-panel="leaves:balances">
                         <div class="table-container">
                             <table id="balances-table">
@@ -354,6 +373,7 @@
                         </div>
                         <p class="muted page-note">Remaining days this year (entitlement minus approved leave). Entitlements are set in Settings.</p>
                     </div>
+
                     <div class="tab-panel" data-panel="leaves:calendar">
                         <div class="table-container">
                             <table id="out-table">
@@ -365,17 +385,18 @@
                     </div>
                 </section>
 
-                <!-- ============ Performance ============ -->
                 <section id="page-performance" class="page" aria-labelledby="h-performance">
                     <div class="section-header">
                         <h2 id="h-performance"><i class="fas fa-star"></i> Performance Reviews</h2>
                         <div class="section-actions"><button type="button" class="btn btn-primary" data-action="add-review"><i class="fas fa-plus"></i> New Review</button></div>
                     </div>
+
                     <div class="dashboard-cards summary-cards">
                         <div class="card card-purple"><h3>Average Rating</h3><p id="p-avg">-</p><i class="fas fa-star card-icon"></i></div>
                         <div class="card card-green"><h3>Completed</h3><p id="p-done">0</p><i class="fas fa-circle-check card-icon"></i></div>
                         <div class="card card-orange"><h3>Drafts</h3><p id="p-draft">0</p><i class="fas fa-pen-ruler card-icon"></i></div>
                     </div>
+
                     <div class="table-container">
                         <table id="reviews-table">
                             <thead><tr><th>Employee</th><th>Period</th><th>Reviewer</th><th>Rating</th><th>Status</th><th>Actions</th></tr></thead>
@@ -384,12 +405,12 @@
                     </div>
                 </section>
 
-                <!-- ============ Training ============ -->
                 <section id="page-training" class="page" aria-labelledby="h-training">
                     <div class="section-header">
                         <h2 id="h-training"><i class="fas fa-graduation-cap"></i> Training &amp; Development</h2>
                         <div class="section-actions"><button type="button" class="btn btn-primary" data-action="add-training"><i class="fas fa-plus"></i> New Training</button></div>
                     </div>
+
                     <div class="table-container">
                         <table id="training-table">
                             <thead><tr><th>Title</th><th>Trainer</th><th>Date</th><th class="num">Hours</th><th>Venue</th><th class="num">Enrolled</th><th>Status</th><th>Actions</th></tr></thead>
@@ -398,7 +419,6 @@
                     </div>
                 </section>
 
-                <!-- ============ Announcements ============ -->
                 <section id="page-announcements" class="page" aria-labelledby="h-announcements">
                     <div class="section-header">
                         <h2 id="h-announcements"><i class="fas fa-bullhorn"></i> Announcements</h2>
@@ -407,7 +427,6 @@
                     <div id="announcement-list" class="announce-list"></div>
                 </section>
 
-                <!-- ============ Departments ============ -->
                 <section id="page-departments" class="page" aria-labelledby="h-departments">
                     <div class="section-header">
                         <h2 id="h-departments"><i class="fas fa-building"></i> Departments</h2>
@@ -416,6 +435,7 @@
                             <button type="submit" class="btn btn-primary"><i class="fas fa-plus"></i> Add</button>
                         </form>
                     </div>
+
                     <div class="table-container">
                         <table id="departments-table">
                             <thead><tr><th>ID</th><th>Department</th><th>Head</th><th class="num">Employees</th><th class="num">Open Jobs</th><th>Actions</th></tr></thead>
@@ -424,7 +444,6 @@
                     </div>
                 </section>
 
-                <!-- ============ Reports ============ -->
                 <section id="page-reports" class="page" aria-labelledby="h-reports">
                     <div class="section-header">
                         <h2 id="h-reports"><i class="fas fa-chart-line"></i> Reports</h2>
@@ -434,9 +453,9 @@
                     <div class="report-grid" id="report-grid"></div>
                 </section>
 
-                <!-- ============ Settings ============ -->
                 <section id="page-settings" class="page" aria-labelledby="h-settings">
                     <div class="section-header"><h2 id="h-settings"><i class="fas fa-gear"></i> HR Settings</h2></div>
+
                     <div class="settings-grid">
                         <section class="report-box">
                             <h3>Profile Picture</h3>
@@ -450,6 +469,7 @@
                                 </div>
                             </div>
                         </section>
+
                         <section class="report-box">
                             <h3>Work Schedule</h3>
                             <form id="settings-schedule" class="settings-form">
@@ -461,6 +481,7 @@
                                 <div class="modal-actions"><button type="submit" class="btn btn-primary"><i class="fas fa-floppy-disk"></i> Save</button></div>
                             </form>
                         </section>
+
                         <section class="report-box">
                             <h3>Leave &amp; Probation Policy</h3>
                             <form id="settings-policy" class="settings-form">
@@ -473,6 +494,7 @@
                                 <div class="modal-actions"><button type="submit" class="btn btn-primary"><i class="fas fa-floppy-disk"></i> Save</button></div>
                             </form>
                         </section>
+
                         <section class="report-box">
                             <h3>Holidays</h3>
                             <form id="holiday-form" class="settings-form">
@@ -521,5 +543,6 @@
 
     <script src="/statistics/js/profile.js"></script>
     <script src="/statistics/js/hr.js"></script>
+    <script src="/statistics/js/hr-animations.js"></script>
 </body>
 </html>
