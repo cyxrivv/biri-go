@@ -387,6 +387,19 @@
                             <h3>Holidays</h3>
                             <ul class="list holiday-list" id="holiday-list"></ul>
                         </section>
+                        <section class="report-box" style="grid-column:1 / -1;">
+                            <div class="section-header">
+                                <h3>Login Activity</h3>
+                                <button type="button" class="btn btn-secondary" id="login-activity-refresh">Refresh</button>
+                            </div>
+                            <p class="muted" id="login-activity-message" role="status">Loading login activity…</p>
+                            <div class="table-container">
+                                <table id="login-activity-table">
+                                    <thead><tr><th>Account ID</th><th>Role</th><th>Activity</th><th>Status</th><th>IP Address</th><th>Device / Browser</th><th>Date &amp; Time</th></tr></thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </section>
                     </div>
                 </section>
             </main>
