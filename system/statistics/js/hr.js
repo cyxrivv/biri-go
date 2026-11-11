@@ -231,7 +231,7 @@ const formDefs = {
         { name: "first_name", label: "First name", required: true, maxlength: 60, value: r?.first_name },
         { name: "last_name", label: "Last name", required: true, maxlength: 60, value: r?.last_name },
         { name: "email", label: "Email", type: "email", required: true, value: r?.email },
-        { name: "phone", label: "Phone", maxlength: 11, value: r?.phone },
+        { name: "phone", label: "Phone", required: true, maxlength: 11, value: r?.phone },
         { name: "sex", label: "Sex", type: "select", options: ["Male", "Female"], required: true, value: r?.sex },
         { name: "birthday", label: "Birthday", type: "date", max: r ? today() : minimumAdultBirthday(), required: true, value: r?.birthday },
         { name: "hired", label: "Date hired", type: "date", required: true, value: r?.hired || today() },
@@ -315,7 +315,7 @@ function editRecord(res, rec, preset) {
             if (!isLettersAndSpaces(v.first_name) || !isLettersAndSpaces(v.last_name)) {
                 throw new Error("Names may contain letters and spaces only.");
             }
-            if (v.phone && !/^09\d{9}$/.test(v.phone)) {
+            if (!/^09\d{9}$/.test(v.phone)) {
                 throw new Error("Mobile number must be 11 digits and start with 09.");
             }
             if (asRequest && (!v.birthday || v.birthday > minimumAdultBirthday())) {
