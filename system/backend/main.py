@@ -206,6 +206,87 @@ def hr_page():
     return render_template("hr.html")
 
 
+def _record_login_event(account_id=None, account_code=None, account_role=None,
+                        event_type="LOGIN", status="SUCCESS"):
+    """Store a minimal authentication event; never store credentials or session data."""
+    with db() as (_, cur):
+        cur.execute(
+            """
+            INSERT INTO login_logs
+                (account_id, account_code, account_role, event_type, status,
+                 ip_address, user_agent)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                account_id,
+                (account_code or "")[:50] or None,
+                (account_role or "")[:30] or None,
+                event_type[:20],
+                status[:20],
+                (request.remote_addr or "")[:45] or None,
+                (request.user_agent.string or "")[:512] or None,
+            ),
+        )
+
+
+@app.route("/api/login-activity")
+@role_required("admin", "hr", "owner", "employee")
+def login_activity():
+    """Users see their own events; the owner and system super admin see all events."""
+    account_id = session.get("account_id")
+    with db() as (_, cur):
+        cur.execute(
+            "SELECT employee_code, account_role FROM account WHERE account_id = %s",
+            (account_id,),
+        )
+        current = cur.fetchone()
+        if not current:
+            return jsonify(error="Account not found."), 404
+
+        can_view_all = (
+            current["account_role"] == "owner"
+            or (
+                current["account_role"] == "admin"
+                and current["employee_code"] == "biri-000000"
+            )
+        )
+        try:
+            limit = min(max(int(request.args.get("limit", 100)), 1), 200)
+            offset = max(int(request.args.get("offset", 0)), 0)
+        except (TypeError, ValueError):
+            return jsonify(error="Invalid pagination values."), 400
+
+        if can_view_all:
+            cur.execute(
+                """
+                SELECT log_id, account_id, account_code, account_role,
+                       event_type, status, ip_address, user_agent, created_at
+                FROM login_logs
+                ORDER BY created_at DESC, log_id DESC
+                LIMIT %s OFFSET %s
+                """,
+                (limit, offset),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT log_id, account_id, account_code, account_role,
+                       event_type, status, ip_address, user_agent, created_at
+                FROM login_logs
+                WHERE account_id = %s
+                ORDER BY created_at DESC, log_id DESC
+                LIMIT %s OFFSET %s
+                """,
+                (account_id, limit, offset),
+            )
+        rows = cur.fetchall()
+
+    for row in rows:
+        if row.get("created_at"):
+            row["created_at"] = row["created_at"].isoformat()
+    return jsonify(items=rows, can_view_all=can_view_all, limit=limit, offset=offset)
+
+
 _FAILED_LOGINS = {}
 MAX_FAILED_LOGINS, LOGIN_WINDOW_SECONDS = 5, 300
 
@@ -229,7 +310,7 @@ def api_login():
 
     with db() as (conn, cur):
         cur.execute(
-            "SELECT account_id, account_password, account_role AS role "
+            "SELECT account_id, employee_code, account_password, account_role AS role "
             "FROM account WHERE employee_code = %s",
             (code,),
         )
@@ -237,9 +318,23 @@ def api_login():
 
     if not row or not check_password_hash(row["account_password"], password):
         _FAILED_LOGINS.setdefault(throttle_key, []).append(time.time())
+        _record_login_event(
+            account_id=row["account_id"] if row else None,
+            account_code=row["employee_code"] if row else code[:50],
+            account_role=row["role"] if row else None,
+            event_type="LOGIN",
+            status="FAILED",
+        )
         return jsonify(success=False, message="Invalid employee ID or password."), 401
 
     _FAILED_LOGINS.pop(throttle_key, None)
+    _record_login_event(
+        account_id=row["account_id"],
+        account_code=row["employee_code"],
+        account_role=row["role"],
+        event_type="LOGIN",
+        status="SUCCESS",
+    )
     session.clear()
     session["csrf_token"] = secrets.token_urlsafe(32)
     session.permanent = True
@@ -622,6 +717,13 @@ def settings_password():
 
 @app.route("/logout", methods=["POST"])
 def logout():
+    account_id = session.get("account_id")
+    if account_id:
+        _record_login_event(
+            account_id=account_id,
+            event_type="LOGOUT",
+            status="SUCCESS",
+        )
     session.clear()
     return redirect("/")
 
