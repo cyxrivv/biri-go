@@ -12,7 +12,7 @@
     responsiveStyle.textContent = `
         .login-activity-panel { display: block; width: 100%; max-width: 100%; min-width: 0; margin-top: 1.25rem; }
         .login-activity-wrap { display: block; width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; }
-        #login-activity-table { width: 100%; min-width: 1050px; border-collapse: collapse; table-layout: fixed; }
+        #login-activity-table { width: 100%; min-width: 1050px; border-collapse: collapse; table-layout: auto; }
         #login-activity-table th, #login-activity-table td {
             padding: 12px 14px;
             vertical-align: top;
@@ -20,16 +20,10 @@
         }
         #login-activity-table th { white-space: nowrap; }
         #login-activity-table td { white-space: normal; overflow-wrap: anywhere; }
-        #login-activity-table th:nth-child(1) { width: 12%; }
-        #login-activity-table th:nth-child(2) { width: 8%; }
-        #login-activity-table th:nth-child(3) { width: 10%; }
-        #login-activity-table th:nth-child(4) { width: 10%; }
-        #login-activity-table th:nth-child(5) { width: 13%; }
-        #login-activity-table th:nth-child(6) { width: 25%; }
-        #login-activity-table th:nth-child(7) { width: 22%; }
         @media (max-width: 640px) {
             .login-activity-panel { margin-top: 1rem; }
             .login-activity-wrap { overflow: visible; }
+            #login-activity-table { min-width: 0; }
             #login-activity-table, #login-activity-table tbody { display: block; width: 100%; }
             #login-activity-table thead {
                 position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
