@@ -18,7 +18,14 @@
             text-align: left;
         }
         #login-activity-table th { white-space: nowrap; }
-        #login-activity-table td { overflow-wrap: anywhere; }
+        #login-activity-table td { white-space: normal; overflow-wrap: anywhere; }
+        #login-activity-table th:nth-child(1) { width: 12%; }
+        #login-activity-table th:nth-child(2) { width: 8%; }
+        #login-activity-table th:nth-child(3) { width: 10%; }
+        #login-activity-table th:nth-child(4) { width: 10%; }
+        #login-activity-table th:nth-child(5) { width: 13%; }
+        #login-activity-table th:nth-child(6) { width: 25%; }
+        #login-activity-table th:nth-child(7) { width: 22%; }
         @media (max-width: 640px) {
             .login-activity-wrap { overflow: visible; }
             #login-activity-table, #login-activity-table tbody { display: block; width: 100%; }
