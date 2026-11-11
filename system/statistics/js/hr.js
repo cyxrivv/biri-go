@@ -6,6 +6,14 @@ const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const iso = d => { const z = new Date(d.getTime() - d.getTimezoneOffset() * 60000); return z.toISOString().slice(0, 10); };
 const today = () => iso(new Date());
+const minimumAdultBirthday = () => {
+    const d = new Date();
+    const year = d.getFullYear() - 18;
+    const month = d.getMonth();
+    const day = Math.min(d.getDate(), new Date(year, month + 1, 0).getDate());
+    return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+};
+const isLettersAndSpaces = value => /^[\\p{L}\\p{M}]+(?:\\s+[\\p{L}\\p{M}]+)*$/u.test(String(value || "").trim());
 const addDays = (s, n) => { const d = new Date(s + "T00:00:00"); d.setDate(d.getDate() + n); return iso(d); };
 const fmtDate = s => s ? new Date(s + "T00:00:00").toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "-";
 const daysBetween = (a, b) => Math.round((new Date(b + "T00:00:00") - new Date(a + "T00:00:00")) / 864e5) + 1;
@@ -190,6 +198,19 @@ function openForm(title, fields, onSubmit, submit) {
         }
         return `<label class="${f.full ? "full" : ""}">${esc(f.label)}${f.required ? " *" : ""} ${input}</label>`;
     }).join("");
+    // Keep employee names to letters/spaces and phone numbers to digits while typing or pasting.
+    if (fields.some(f => f.name === "first_name")) {
+        ["first_name", "last_name"].forEach(name => {
+            const input = $("#ff-" + name);
+            if (input) input.addEventListener("input", () => {
+                input.value = input.value.replace(/[^\\p{L}\\p{M}\\s]/gu, "");
+            });
+        });
+        const phoneInput = $("#ff-phone");
+        if (phoneInput) phoneInput.addEventListener("input", () => {
+            phoneInput.value = phoneInput.value.replace(/\\D/g, "").slice(0, 11);
+        });
+    }
     formHandler = async () => {
         const out = {};
         for (const f of fields) {
@@ -207,12 +228,12 @@ function openView(title, html) { $("#view-title").textContent = title; $("#view-
 /* ---------- generic add/edit forms ---------- */
 const formDefs = {
     employees: r => ({ title: r ? "Edit Employee" : "Add Employee", fields: [
-        { name: "first_name", label: "First name", required: true, value: r?.first_name },
-        { name: "last_name", label: "Last name", required: true, value: r?.last_name },
+        { name: "first_name", label: "First name", required: true, maxlength: 60, value: r?.first_name },
+        { name: "last_name", label: "Last name", required: true, maxlength: 60, value: r?.last_name },
         { name: "email", label: "Email", type: "email", required: true, value: r?.email },
-        { name: "phone", label: "Phone", value: r?.phone },
+        { name: "phone", label: "Phone", maxlength: 11, value: r?.phone },
         { name: "sex", label: "Sex", type: "select", options: ["Male", "Female"], required: true, value: r?.sex },
-        { name: "birthday", label: "Birthday", type: "date", required: true, value: r?.birthday },
+        { name: "birthday", label: "Birthday", type: "date", max: r ? today() : minimumAdultBirthday(), required: true, value: r?.birthday },
         { name: "hired", label: "Date hired", type: "date", required: true, value: r?.hired || today() },
         { name: "department_id", label: "Department", type: "select", options: deptOpts(), num: true, required: true, value: r?.department_id },
         { name: "position", label: "Position", required: true, value: r?.position },
@@ -290,6 +311,17 @@ function editRecord(res, rec, preset) {
     const def = formDefs[res](rec || preset);
     const asRequest = res === "employees" && !rec?.id;
     openForm(def.title, def.fields, async v => {
+        if (res === "employees") {
+            if (!isLettersAndSpaces(v.first_name) || !isLettersAndSpaces(v.last_name)) {
+                throw new Error("Names may contain letters and spaces only.");
+            }
+            if (v.phone && !/^09\\d{9}$/.test(v.phone)) {
+                throw new Error("Mobile number must be 11 digits and start with 09.");
+            }
+            if (asRequest && (!v.birthday || v.birthday > minimumAdultBirthday())) {
+                throw new Error("Employee must be at least 18 years old.");
+            }
+        }
         if (def.check) def.check(v);
         if (res === "attendance" && !rec?.id) {
             const dup = S.attendance.find(a => a.employee_id == v.employee_id && a.date === v.date);
