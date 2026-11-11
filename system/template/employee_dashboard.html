@@ -69,6 +69,7 @@
                     <li data-page="pay" tabindex="0" role="button"><i class="fas fa-wallet" aria-hidden="true"></i> Salary &amp; payslips</li>
                     <li data-page="documents" tabindex="0" role="button"><i class="far fa-folder-open" aria-hidden="true"></i> My documents</li>
                     <li data-page="news" tabindex="0" role="button"><i class="fas fa-bullhorn" aria-hidden="true"></i> Announcements</li>
+                    <li data-page="security" tabindex="0" role="button"><i class="fas fa-shield-halved" aria-hidden="true"></i> Login Activity</li>
                 </ul>
             </nav>
 
@@ -311,6 +312,24 @@
                 </article>
             </section>
 
+            <section id="page-security" class="page" aria-labelledby="security-title">
+                <div class="section-header page-head">
+                    <div>
+                        <h2 id="security-title">Login Activity</h2>
+                        <p class="muted">Review recent sign-ins and sign-outs for your account.</p>
+                    </div>
+                    <button type="button" class="btn btn-secondary" id="login-activity-refresh">Refresh</button>
+                </div>
+                <article class="panel">
+                    <p class="muted" id="login-activity-message" role="status">Loading login activity…</p>
+                    <div class="table-container table-wrap">
+                        <table id="login-activity-table">
+                            <thead><tr><th>Activity</th><th>Status</th><th>IP Address</th><th>Device / Browser</th><th>Date &amp; Time</th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </article>
+            </section>
         </main>
     </div>
 </div>
