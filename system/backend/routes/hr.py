@@ -13,6 +13,7 @@ Resources: employees, departments, jobs, applicants, processes, attendance,
 import json
 import re
 import secrets
+import unicodedata
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
@@ -325,6 +326,23 @@ def _position_id(cur, dept_id, title):
     return cur.lastrowid
 
 
+def _valid_person_name(value):
+    value = str(value or "").strip()
+    return bool(value) and all(
+        ch == " " or unicodedata.category(ch).startswith(("L", "M"))
+        for ch in value
+    )
+
+
+def _is_at_least_18(birthday):
+    today = date.today()
+    try:
+        eighteenth_birthday = birthday.replace(year=birthday.year + 18)
+    except ValueError:  # February 29 in a non-leap year
+        eighteenth_birthday = birthday.replace(year=birthday.year + 18, day=28)
+    return eighteenth_birthday <= today
+
+
 def _parse_employee(data):
     first, last = _s(data, "first_name", 50), _s(data, "last_name", 50)
     email, phone = _s(data, "email", 100).lower(), _s(data, "phone", 20)
@@ -340,6 +358,10 @@ def _parse_employee(data):
         raise ApiError("First name is required.")
     if not last:
         raise ApiError("Last name is required.")
+    if not _valid_person_name(first) or not _valid_person_name(last):
+        raise ApiError("Names may contain letters and spaces only.")
+    if not re.fullmatch(r"09\d{9}", phone):
+        raise ApiError("Mobile number must be 11 digits and start with 09.")
     if not email or not EMAIL_RE.match(email):
         raise ApiError("A valid email is required.")
     if sex not in ("Male", "Female"):
@@ -413,6 +435,8 @@ def list_employee_requests():
 def create_employee():
     """HR can't create accounts. This files a Pending request for the admin to approve."""
     e = _parse_employee(_body())
+    if not _is_at_least_18(e["birthday"]):
+        raise ApiError("Employee must be at least 18 years old.")
     with db() as (conn, cur):
         cur.execute("SELECT 1 AS ok FROM employees WHERE email = %s", (e["email"],))
         if cur.fetchone():

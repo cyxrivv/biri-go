@@ -6,6 +6,14 @@ const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const iso = d => { const z = new Date(d.getTime() - d.getTimezoneOffset() * 60000); return z.toISOString().slice(0, 10); };
 const today = () => iso(new Date());
+const minimumAdultBirthday = () => {
+    const d = new Date();
+    const year = d.getFullYear() - 18;
+    const month = d.getMonth();
+    const day = Math.min(d.getDate(), new Date(year, month + 1, 0).getDate());
+    return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+};
+const isLettersAndSpaces = value => /^[\p{L}\p{M}]+(?: +[\p{L}\p{M}]+)*$/u.test(String(value || "").trim());
 const addDays = (s, n) => { const d = new Date(s + "T00:00:00"); d.setDate(d.getDate() + n); return iso(d); };
 const fmtDate = s => s ? new Date(s + "T00:00:00").toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "-";
 const daysBetween = (a, b) => Math.round((new Date(b + "T00:00:00") - new Date(a + "T00:00:00")) / 864e5) + 1;
@@ -76,6 +84,13 @@ function seed() {
     emps[1].hired = addDays(t, -150);
     dep.forEach(d => { d.head = (emps.find(e => e.department_id === d.id) || {}).first_name || ""; });
     mem.departments = dep; mem.employees = emps;
+    mem.positions = [
+        { id: 1, title: "Operations Associate", department_id: 1 },
+        { id: 2, title: "Sales Representative", department_id: 2 },
+        { id: 3, title: "Accounting Assistant", department_id: 3 },
+        { id: 4, title: "IT Specialist", department_id: 4 },
+        { id: 5, title: "HR Assistant", department_id: 5 },
+    ];
     mem.jobs = [
         { id: 1, title: "Customer Support Rep", department_id: 1, type: "Full-time", openings: 3, posted: addDays(t, -12), status: "Open" },
         { id: 2, title: "Backend Developer", department_id: 4, type: "Full-time", openings: 1, posted: addDays(t, -30), status: "Open" },
@@ -150,6 +165,9 @@ const initials = e => ((e.first_name || "?")[0] + (e.last_name || "")[0]).toUppe
 const empOpts = (activeOnly = true) => S.employees.filter(e => !activeOnly || e.status !== "Resigned" && e.status !== "Terminated")
     .map(e => ({ v: e.id, l: `${e.first_name} ${e.last_name}` }));
 const deptOpts = () => S.departments.map(d => ({ v: d.id, l: d.name }));
+const positionOpts = deptId => (S.positions || [])
+    .filter(p => Number(p.department_id) === Number(deptId))
+    .map(p => ({ v: p.title, l: p.title }));
 const onLeaveOn = date => S.leaves.filter(l => l.status === "Approved" && l.from <= date && l.to >= date);
 
 // These helpers create HTML, so every value that can reach an attribute or text node
@@ -190,6 +208,33 @@ function openForm(title, fields, onSubmit, submit) {
         }
         return `<label class="${f.full ? "full" : ""}">${esc(f.label)}${f.required ? " *" : ""} ${input}</label>`;
     }).join("");
+    // Position choices depend on the selected department.
+    if (fields.some(f => f.name === "department_id") && fields.some(f => f.name === "position")) {
+        const departmentInput = $("#ff-department_id");
+        const positionInput = $("#ff-position");
+        const refreshPositions = (selected = "") => {
+            const options = positionOpts(departmentInput.value);
+            positionInput.innerHTML =
+                '<option value="">Choose a position</option>' +
+                options.map(o => `<option value="${esc(o.v)}">${esc(o.l)}</option>`).join("");
+            if (selected && options.some(o => o.v === selected)) positionInput.value = selected;
+        };
+        refreshPositions(fields.find(f => f.name === "position")?.value || "");
+        departmentInput.addEventListener("change", () => refreshPositions());
+    }
+    // Keep employee names to letters/spaces and phone numbers to digits while typing or pasting.
+    if (fields.some(f => f.name === "first_name")) {
+        ["first_name", "last_name"].forEach(name => {
+            const input = $("#ff-" + name);
+            if (input) input.addEventListener("input", () => {
+                input.value = input.value.replace(/[^\p{L}\p{M} ]/gu, "");
+            });
+        });
+        const phoneInput = $("#ff-phone");
+        if (phoneInput) phoneInput.addEventListener("input", () => {
+            phoneInput.value = phoneInput.value.replace(/\D/g, "").slice(0, 11);
+        });
+    }
     formHandler = async () => {
         const out = {};
         for (const f of fields) {
@@ -207,15 +252,15 @@ function openView(title, html) { $("#view-title").textContent = title; $("#view-
 /* ---------- generic add/edit forms ---------- */
 const formDefs = {
     employees: r => ({ title: r ? "Edit Employee" : "Add Employee", fields: [
-        { name: "first_name", label: "First name", required: true, value: r?.first_name },
-        { name: "last_name", label: "Last name", required: true, value: r?.last_name },
+        { name: "first_name", label: "First name", required: true, maxlength: 60, value: r?.first_name },
+        { name: "last_name", label: "Last name", required: true, maxlength: 60, value: r?.last_name },
         { name: "email", label: "Email", type: "email", required: true, value: r?.email },
-        { name: "phone", label: "Phone", value: r?.phone },
+        { name: "phone", label: "Phone", required: true, maxlength: 11, value: r?.phone },
         { name: "sex", label: "Sex", type: "select", options: ["Male", "Female"], required: true, value: r?.sex },
-        { name: "birthday", label: "Birthday", type: "date", required: true, value: r?.birthday },
+        { name: "birthday", label: "Birthday", type: "date", max: r ? today() : minimumAdultBirthday(), required: true, value: r?.birthday },
         { name: "hired", label: "Date hired", type: "date", required: true, value: r?.hired || today() },
         { name: "department_id", label: "Department", type: "select", options: deptOpts(), num: true, required: true, value: r?.department_id },
-        { name: "position", label: "Position", required: true, value: r?.position },
+        { name: "position", label: "Position", type: "select", options: positionOpts(r?.department_id), blank: "Choose a position", required: true, value: r?.position },
         { name: "salary", label: "Monthly Salary (₱)", type: "number", min: 0, step: "0.01", required: true, value: r?.salary ?? 0 },
         { name: "type", label: "Employment type", type: "select", options: EMP_TYPES, value: r?.type || "Full-time" },
         { name: "status", label: "Status", type: "select", options: ["Active", "On Leave", "Resigned", "Terminated"], value: r?.status || "Active" },
@@ -290,6 +335,17 @@ function editRecord(res, rec, preset) {
     const def = formDefs[res](rec || preset);
     const asRequest = res === "employees" && !rec?.id;
     openForm(def.title, def.fields, async v => {
+        if (res === "employees") {
+            if (!isLettersAndSpaces(v.first_name) || !isLettersAndSpaces(v.last_name)) {
+                throw new Error("Names may contain letters and spaces only.");
+            }
+            if (!/^09\d{9}$/.test(v.phone)) {
+                throw new Error("Mobile number must be 11 digits and start with 09.");
+            }
+            if (asRequest && (!v.birthday || v.birthday > minimumAdultBirthday())) {
+                throw new Error("Employee must be at least 18 years old.");
+            }
+        }
         if (def.check) def.check(v);
         if (res === "attendance" && !rec?.id) {
             const dup = S.attendance.find(a => a.employee_id == v.employee_id && a.date === v.date);
@@ -877,8 +933,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         pill.dataset.state = "online"; pillText.textContent = "Connected";
     }
     if (me || DEMO) {
-        try { await load(); }
-        catch (err) { pill.dataset.state = "offline"; pillText.textContent = "Data error"; toast(err.message, true); }
+        try {
+            await load();
+            if (DEMO) {
+                S.positions = mem.positions || [];
+            } else {
+                const options = await api("/api/hr/options");
+                S.positions = Array.isArray(options.positions) ? options.positions : [];
+            }
+        } catch (err) {
+            pill.dataset.state = "offline";
+            pillText.textContent = "Data error";
+            toast(err.message, true);
+        }
     }
     RES.forEach(r => { S[r] = S[r] || []; });
     renderAll();
