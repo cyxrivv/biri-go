@@ -360,7 +360,7 @@ def _parse_employee(data):
         raise ApiError("Last name is required.")
     if not _valid_person_name(first) or not _valid_person_name(last):
         raise ApiError("Names may contain letters and spaces only.")
-    if phone and not re.fullmatch(r"09\d{9}", phone):
+    if not re.fullmatch(r"09\d{9}", phone):
         raise ApiError("Mobile number must be 11 digits and start with 09.")
     if not email or not EMAIL_RE.match(email):
         raise ApiError("A valid email is required.")
