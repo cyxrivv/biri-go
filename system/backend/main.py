@@ -189,7 +189,15 @@ def index():
 @app.route("/admin")
 @role_required("admin")
 def admin_page():
-    return render_template("admin.html")
+    with db() as (_, cur):
+        cur.execute(
+            "SELECT 1 AS linked FROM account a "
+            "JOIN employees e ON e.employee_id = a.employee_id "
+            "WHERE a.account_id = %s",
+            (session.get("account_id"),),
+        )
+        has_linked_employee = cur.fetchone() is not None
+    return render_template("admin.html", has_linked_employee=has_linked_employee)
 
 
 @app.route("/hr")
