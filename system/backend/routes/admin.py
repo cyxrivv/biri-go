@@ -1,8 +1,10 @@
 import re
+import secrets
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from flask import Blueprint, current_app, jsonify, request, session
+from werkzeug.security import generate_password_hash
 
 from backup_restore import (
     BACKUP_DIR,
@@ -34,7 +36,9 @@ def dashboard():
           (SELECT COUNT(*) FROM departments)                         AS total_departments,
           (SELECT COUNT(*) FROM positions)                           AS total_positions,
           (SELECT COUNT(*) FROM leave_requests
-             WHERE leave_status = 'Pending')                         AS pending_leaves
+             WHERE leave_status = 'Pending')                         AS pending_leaves,
+          (SELECT COUNT(*) FROM hr_employee_requests
+             WHERE status = 'Pending')                               AS pending_requests
         """
     )
     stats["recent_activity"] = fetch_all(
@@ -417,6 +421,117 @@ def delete_leave(leave_id):
 
 # --------------------------------------------------------------------------
 # Database backups (administrator only)
+# --------------------------------------------------------------------------
+# Employee requests (HR asks, admin approves -> employee + account are created)
+# --------------------------------------------------------------------------
+REQUEST_SELECT = """
+    SELECT r.id, r.first_name, r.last_name, CONCAT(r.first_name, ' ', r.last_name) AS name,
+           r.sex, r.birthday, r.email, r.phone, r.salary, r.hired, r.emp_type, r.emp_status,
+           d.dept_name AS department, p.title AS position, r.status, r.review_note,
+           r.created_at, r.reviewed_at
+    FROM hr_employee_requests r
+    LEFT JOIN departments d ON d.department_id = r.department_id
+    LEFT JOIN positions p ON p.position_id = r.position_id
+"""
+
+
+@admin_bp.get("/api/employee-requests")
+@role_required("admin")
+def list_employee_requests():
+    status = request.args.get("status", "").strip()
+    sql, params = REQUEST_SELECT, []
+    if status in ("Pending", "Approved", "Rejected"):
+        sql += " WHERE r.status = %s"
+        params.append(status)
+    sql += " ORDER BY (r.status = 'Pending') DESC, r.id DESC"
+    return jsonify([clean(r) for r in fetch_all(sql, params)])
+
+
+@admin_bp.post("/api/employee-requests/<int:request_id>/approve")
+@role_required("admin")
+def approve_employee_request(request_id):
+    """Create the employee and a login account from a pending HR request."""
+    with db() as (conn, cur):
+        cur.execute("SELECT * FROM hr_employee_requests WHERE id = %s FOR UPDATE", (request_id,))
+        r = cur.fetchone()
+        if not r:
+            raise ApiError("Request not found.", 404)
+        if r["status"] != "Pending":
+            raise ApiError("This request was already %s." % r["status"].lower(), 409)
+
+        # Things may have changed since HR sent it, so check again.
+        cur.execute("SELECT 1 AS ok FROM employees WHERE email = %s", (r["email"],))
+        if cur.fetchone():
+            raise ApiError("An employee with that email already exists.", 409)
+        cur.execute("SELECT 1 AS ok FROM account WHERE account_email = %s", (r["email"],))
+        if cur.fetchone():
+            raise ApiError("An account with that email already exists.", 409)
+        cur.execute("SELECT 1 AS ok FROM positions WHERE position_id = %s AND department_id = %s",
+                    (r["position_id"], r["department_id"]))
+        if not cur.fetchone():
+            raise ApiError("The requested department or position no longer exists. Reject this request "
+                           "and ask HR to send a new one.", 409)
+
+        cur.execute(
+            "INSERT INTO employees (first_name, middle_name, last_name, suffix, sex, birthday, email, phone, "
+            "stat, salary, department_id, position_id, hired, emp_type) "
+            "VALUES (%s, NULL, %s, NULL, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            (r["first_name"], r["last_name"], r["sex"], r["birthday"], r["email"], r["phone"],
+             r["emp_status"] or "Active", r["salary"] or 0, r["department_id"], r["position_id"],
+             r["hired"], r["emp_type"] or "Full-time"),
+        )
+        emp_id = cur.lastrowid
+
+        code = None
+        for _ in range(20):
+            c = "biri-%06d" % secrets.randbelow(1_000_000)
+            cur.execute("SELECT 1 AS ok FROM account WHERE employee_code = %s", (c,))
+            if not cur.fetchone():
+                code = c
+                break
+        if not code:
+            raise ApiError("Could not generate a unique employee ID. Please try again.", 500)
+
+        temp_password = secrets.token_urlsafe(8)
+        cur.execute(
+            "INSERT INTO account (employee_code, employee_id, account_email, account_password, account_role) "
+            "VALUES (%s, %s, %s, %s, 'employee')",
+            (code, emp_id, r["email"], generate_password_hash(temp_password)),
+        )
+        cur.execute(
+            "UPDATE hr_employee_requests SET status = 'Approved', reviewed_by = %s, reviewed_at = NOW() "
+            "WHERE id = %s",
+            (session.get("account_id"), request_id),
+        )
+        log_activity(cur, "Admin approved request #%s and created employee %s %s"
+                     % (request_id, r["first_name"], r["last_name"]))
+    return jsonify(id=emp_id, employee_code=code, email=r["email"], temp_password=temp_password)
+
+
+@admin_bp.post("/api/employee-requests/<int:request_id>/reject")
+@role_required("admin")
+def reject_employee_request(request_id):
+    data = json_body()
+    note = clean(data.get("note"))
+    if len(note) > 255:
+        raise ApiError("The reason is too long (max 255 characters).")
+    with db() as (conn, cur):
+        cur.execute("SELECT first_name, last_name, status FROM hr_employee_requests WHERE id = %s FOR UPDATE",
+                    (request_id,))
+        r = cur.fetchone()
+        if not r:
+            raise ApiError("Request not found.", 404)
+        if r["status"] != "Pending":
+            raise ApiError("This request was already %s." % r["status"].lower(), 409)
+        cur.execute(
+            "UPDATE hr_employee_requests SET status = 'Rejected', review_note = %s, reviewed_by = %s, "
+            "reviewed_at = NOW() WHERE id = %s",
+            (note or None, session.get("account_id"), request_id),
+        )
+        log_activity(cur, "Admin rejected request #%s (%s %s)" % (request_id, r["first_name"], r["last_name"]))
+    return jsonify(ok=True)
+
+
 # --------------------------------------------------------------------------
 _BACKUP_NAME_RE = re.compile(r"^biri_go_\d{8}_\d{6}_\d{6}\.sql\.gz$")
 

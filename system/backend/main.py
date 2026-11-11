@@ -24,6 +24,7 @@ from routes.owner import owner_bp
 from werkzeug.security import check_password_hash, generate_password_hash
 from profile_pictures import profile_bp
 from routes.my_pay import my_pay_bp
+from employee_documents import docs_bp, init_documents_table
 
 
 if getattr(sys, "_MEIPASS", None):  # running as a packaged .exe
@@ -63,6 +64,7 @@ app.register_blueprint(hr_bp)
 app.register_blueprint(owner_bp)
 app.register_blueprint(profile_bp)
 app.register_blueprint(my_pay_bp)
+app.register_blueprint(docs_bp)
 
 ROLE_HOME = {"admin": "/admin", "hr": "/hr", "owner": "/owner", "employee": "/employee"}  # match your blueprint URLs
 
@@ -88,12 +90,21 @@ def no_cache(resp):
     return resp
 
 
+# File uploads use multipart/form-data, so these routes are exempt from the JSON-only rule.
+MULTIPART_UPLOAD_PATHS = {"/api/employee/documents"}
+
+
 @app.before_request
 def require_json_for_writes():
     if (
         request.method in ("POST", "PUT", "PATCH", "DELETE")
         and request.path.startswith("/api/")
         and not request.is_json
+        and not (
+            request.method == "POST"
+            and request.path in MULTIPART_UPLOAD_PATHS
+            and request.mimetype == "multipart/form-data"
+        )
     ):
         return jsonify(error="Content-Type must be application/json."), 415
 
@@ -638,6 +649,7 @@ def _init_db_safely():
     try:
         init_db()
         init_hr_tables()
+        init_documents_table()
         _ensure_first_admin()
     except mysql.connector.Error as err:
         app.logger.error(

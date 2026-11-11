@@ -36,6 +36,7 @@ async function loadDashboard() {
         setText("total-departments", d.total_departments);
         setText("total-positions", d.total_positions);
         setText("pending-leaves", d.pending_leaves);
+        updateRequestsBadge(d.pending_requests);
         updateBell(d.pending_leaves);
 
         const list = document.getElementById("activity-list");
@@ -236,6 +237,7 @@ function showSection(section) {
     if (page) page.classList.add("active");
 
     if (section === "employees") loadEmployees();
+    if (section === "requests") loadRequests();
     if (section === "department") loadDepartments();
     if (section === "positions") loadPositions();
     if (section === "salaries") loadSalaries();
@@ -423,6 +425,83 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
     });
+});
+
+// ---------------------------------------------------------------- Employee requests (from HR)
+function updateRequestsBadge(n) {
+    const b = byId("requests-badge");
+    if (!b) return;
+    b.style.display = Number(n) ? "inline-block" : "none";
+    b.title = n ? n + " pending request" + (Number(n) === 1 ? "" : "s") : "";
+}
+
+async function loadRequests() {
+    const tbody = document.querySelector("#requests-table tbody");
+    const status = byId("request-filter").value;
+    let rows;
+    try {
+        rows = await api("/api/employee-requests" + (status ? "?status=" + encodeURIComponent(status) : ""));
+    } catch (err) {
+        toast(err.message, "error");
+        return;
+    }
+    tbody.innerHTML = "";
+    if (!rows.length) return emptyRow(tbody, 9, "No employee requests found.");
+
+    rows.forEach((r) => {
+        const tr = document.createElement("tr");
+        [r.id, r.name, r.email, r.department || "-", r.position || "-", peso(r.salary || 0),
+         fmtDate(String(r.created_at || "").slice(0, 10)), r.status].forEach((v) => {
+            const td = document.createElement("td");
+            td.textContent = v;
+            tr.appendChild(td);
+        });
+        if (r.status === "Rejected" && r.review_note) tr.children[7].title = "Reason: " + r.review_note;
+
+        const td = document.createElement("td");
+        td.className = "actions";
+        if (r.status === "Pending") {
+            const btn = (label, cls, fn) => {
+                const b = document.createElement("button");
+                b.type = "button";
+                b.className = "btn " + cls;
+                b.textContent = label;
+                b.addEventListener("click", fn);
+                td.appendChild(b);
+            };
+            btn("Approve", "btn-primary", () => approveRequest(r));
+            btn("Reject", "btn-secondary", () => rejectRequest(r));
+        }
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+    });
+}
+
+async function approveRequest(r) {
+    if (!confirm("Approve " + r.name + " and create their account?")) return;
+    try {
+        const out = await api("/api/employee-requests/" + r.id + "/approve", { method: "POST", body: "{}" });
+        alert("Account created for " + out.email + ".\n\nEmployee ID: " + out.employee_code +
+              "\nTemporary password: " + out.temp_password +
+              "\n\nWrite this down. The password is shown only once.");
+        loadRequests();
+        loadDashboard();
+    } catch (err) { toast(err.message, "error"); }
+}
+
+async function rejectRequest(r) {
+    const note = prompt("Reject the request for " + r.name + "?\n\nReason for HR (optional):");
+    if (note === null) return;   // cancelled
+    try {
+        await api("/api/employee-requests/" + r.id + "/reject", { method: "POST", body: JSON.stringify({ note }) });
+        toast("Request rejected.");
+        loadRequests();
+        loadDashboard();
+    } catch (err) { toast(err.message, "error"); }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    byId("request-filter").addEventListener("change", loadRequests);
 });
 
 // ---------------------------------------------------------------- Shared helpers
