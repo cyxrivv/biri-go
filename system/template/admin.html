@@ -70,7 +70,9 @@
                         <li data-section="department" tabindex="0" role="button"><i class="fa-solid fa-sitemap" aria-hidden="true"></i>Department</li>
                         <li data-section="positions" tabindex="0" role="button"><i class="fa-solid fa-briefcase" aria-hidden="true"></i>Positions</li>
                         <li data-section="salaries" tabindex="0" role="button"><i class="fa-solid fa-wallet" aria-hidden="true"></i>Salaries</li>
+                        {% if has_linked_employee %}
                         <li data-section="my-pay" tabindex="0" role="button"><i class="fa-solid fa-money-check-dollar" aria-hidden="true"></i>My Salary &amp; Payslips</li>
+                        {% endif %}
                         <li data-section="leaves" tabindex="0" role="button"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i>Leaves</li>
                         <li data-section="reports" tabindex="0" role="button"><i class="fa-solid fa-chart-column" aria-hidden="true"></i>Reports</li>
                         <li data-section="backup" tabindex="0" role="button"><i class="fa-solid fa-database" aria-hidden="true"></i>Backups</li>
@@ -242,6 +244,7 @@
                     </section>
                 </div>
 
+                {% if has_linked_employee %}
                 <div id="page-my-pay" class="page">
                     <div class="dashboard-cards">
                         <div class="card card-green">
@@ -268,13 +271,14 @@
                         <div class="table-container">
                             <table id="mypay-table">
                                 <thead>
-                                    <tr><th>Period</th><th>Gross Pay</th><th>Deductions</th><th>Net Pay</th><th>Payslip</th></tr>
+                                    <tr><th>Period</th><th>Gross Pay</th><th>Deductions</th><th>Net Pay</th><th>Confirmation</th><th>Payslip</th></tr>
                                 </thead>
                                 <tbody></tbody>
                             </table>
                         </div>
                     </section>
                 </div>
+                {% endif %}
 
                 <div id="page-leaves" class="page">
                     <section class="section">
