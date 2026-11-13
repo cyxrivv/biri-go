@@ -629,8 +629,13 @@ def restore_admin_backup(filename):
             verify_cloud_backup(filename)
             safety = create_cloud_backup(source="pre-restore", preserve_filename=filename)
             restored = restore_cloud_backup(filename)
-            with db() as (_, cur):
-                log_activity(cur, "Admin restored database from cloud backup %s" % filename)
+            try:
+                with db() as (_, cur):
+                    log_activity(cur, "Admin restored database from cloud backup %s" % filename)
+            except Exception:
+                current_app.logger.exception(
+                    "Database restore succeeded, but the audit activity could not be recorded."
+                )
             return jsonify(message="Database contents restored successfully.",
                            safety_backup=safety["filename"], restored=restored)
 
