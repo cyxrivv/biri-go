@@ -688,7 +688,7 @@ def monthly_cloud_backup():
     lock_name = ("biri_go_monthly_" + config.DB_NAME + "_" + month.replace("-", ""))[:64]
     try:
         from cloud_backup import create_cloud_backup, verify_cloud_backup
-        with db() as (_, cur):
+        with db() as (conn, cur):
             cur.execute("SELECT GET_LOCK(%s, 5) AS acquired", (lock_name,))
             lock_row = cur.fetchone()
             if not lock_row or int(lock_row.get("acquired") or 0) != 1:
@@ -719,6 +719,8 @@ def monthly_cloud_backup():
                     cur,
                     "Scheduled cloud backup for %s: %s" % (month, result["filename"]),
                 )
+                # Commit the idempotency marker before releasing the advisory lock.
+                conn.commit()
                 current_app.logger.info(
                     "Monthly cloud backup completed: %s", result["filename"]
                 )
