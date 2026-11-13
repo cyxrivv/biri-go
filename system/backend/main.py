@@ -137,7 +137,8 @@ def acquire_database_write_guard():
         or os.environ.get("CLOUD_BACKUPS_ENABLED") == "1"
     ):
         return
-    if request.path.startswith("/api/admin/backups/") and request.path.endswith("/restore"):
+    if request.path.startswith("/api/admin/backups"):
+        # Cloud restore holds its own lock; backup object operations do not mutate DB rows.
         return
 
     connection = None
