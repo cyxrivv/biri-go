@@ -318,6 +318,26 @@ def _restore_data(snapshot):
                 pass
 
 
+def verify_cloud_backup(filename):
+    name = _valid_filename(filename)
+    payload = _blob().get_blob(PREFIX + name, access="private").body
+    snapshot = _decode(payload, name)
+    with db() as (_, cur):
+        current = _schema(cur)
+    archived = {
+        item["name"]: _normalise_ddl(item.get("create_sql", ""))
+        for item in snapshot["tables"]
+    }
+    if set(current) != set(archived):
+        raise RuntimeError("Schema/table list differs from backup; no data was changed.")
+    for table_name in current:
+        if current[table_name] != archived[table_name]:
+            raise RuntimeError(
+                "Schema for table %s differs from backup; no data was changed." % table_name
+            )
+    return {"table_count": snapshot["table_count"], "row_count": snapshot["row_count"]}
+
+
 def restore_cloud_backup(filename):
     name = _valid_filename(filename)
     payload = _blob().get_blob(PREFIX + name, access="private").body
