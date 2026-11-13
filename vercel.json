@@ -15,7 +15,7 @@
   "functions": {
     "api/index.py": {
       "includeFiles": "system/**",
-      "maxDuration": 60
+      "maxDuration": 300
     }
   }
 }

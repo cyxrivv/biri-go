@@ -38,7 +38,9 @@ backups cannot be decrypted.
 - The service retains the newest five verified cloud archives.
 - Monthly schedule: 0 0 1 * * (scheduled for 00:00 UTC on the first day of
   each month). Hobby Cron execution can fall within a roughly 1-hour window;
-  this is approximately 08:00-09:00 Philippines time.
+  this is approximately 08:00-09:00 Philippines time. Vercel registers Cron
+  Jobs on production deployments; test the protected endpoint manually on
+  Preview deployments.
 - The monthly route uses a TiDB advisory lock and an activity-log marker so a
   repeated invocation in the same month reuses the verified archive instead
   of creating another scheduled copy.
@@ -54,8 +56,9 @@ backups cannot be decrypted.
 - A TiDB advisory lock is held from pre-restore validation through the safety
   backup and restore. Normal application write requests acquire the same lock,
   so they wait briefly or receive HTTP 503 while restore is in progress.
-- CLOUD_BACKUP_MAX_BYTES defaults to 64 MiB. Keep archives within the Vercel
-  Function memory and execution-time limits.
+- CLOUD_BACKUP_MAX_BYTES defaults to 64 MiB. The function is configured for
+  up to 300 seconds on Hobby with Fluid Compute enabled. Keep archives within
+  Vercel Function memory and execution-time limits.
 
 ## TiDB transaction limit
 
