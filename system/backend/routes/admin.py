@@ -687,22 +687,21 @@ def monthly_cloud_backup():
     month = datetime.utcnow().strftime("%Y-%m")
     lock_name = ("biri_go_monthly_" + config.DB_NAME + "_" + month.replace("-", ""))[:64]
     try:
-        from cloud_backup import create_cloud_backup, verify_cloud_backup
-        with db() as (conn, cur):
+        from cloud_backup import (
+            create_cloud_backup, create_monthly_backup_marker,
+            delete_monthly_backup_marker, list_monthly_backup_markers,
+            verify_cloud_backup,
+        )
+        with db() as (_, cur):
             cur.execute("SELECT GET_LOCK(%s, 5) AS acquired", (lock_name,))
             lock_row = cur.fetchone()
             if not lock_row or int(lock_row.get("acquired") or 0) != 1:
                 return jsonify(error="A monthly backup is already running. Retry shortly."), 503
             try:
-                marker = "Scheduled cloud backup for %s:%%" % month
-                cur.execute(
-                    "SELECT message FROM activity_log WHERE message LIKE %s "
-                    "ORDER BY activity_id DESC LIMIT 1",
-                    (marker,),
-                )
-                existing = cur.fetchone()
-                if existing:
-                    filename = existing["message"].split(": ", 1)[-1]
+                # Marker objects live separately from the five retained archives.
+                # A repeated invocation reuses the existing verified monthly archive.
+                for marker in list_monthly_backup_markers(month):
+                    filename = marker.pathname.rsplit("/", 1)[-1].removesuffix(".done")
                     try:
                         verify_cloud_backup(filename)
                         return jsonify(
@@ -710,17 +709,10 @@ def monthly_cloud_backup():
                             backup={"filename": filename, "already_exists": True},
                         )
                     except Exception:
-                        # A retained marker can outlive its archive or schema.
-                        # Create a fresh monthly snapshot rather than reporting a false success.
-                        pass
+                        delete_monthly_backup_marker(marker.pathname)
 
                 result = create_cloud_backup(source="scheduled")
-                log_activity(
-                    cur,
-                    "Scheduled cloud backup for %s: %s" % (month, result["filename"]),
-                )
-                # Commit the idempotency marker before releasing the advisory lock.
-                conn.commit()
+                create_monthly_backup_marker(month, result["filename"])
                 current_app.logger.info(
                     "Monthly cloud backup completed: %s", result["filename"]
                 )

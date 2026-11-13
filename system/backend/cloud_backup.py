@@ -221,6 +221,32 @@ def list_cloud_backups():
     return sorted(items, key=lambda x: x["created_at"], reverse=True)
 
 
+def list_monthly_backup_markers(month):
+    if not re.fullmatch(r"\d{4}-\d{2}", month):
+        raise RuntimeError("Invalid monthly backup marker.")
+    return list(_blob().query_blobs(prefix=PREFIX + "monthly/" + month + "/"))
+
+
+def create_monthly_backup_marker(month, filename):
+    if not re.fullmatch(r"\d{4}-\d{2}", month):
+        raise RuntimeError("Invalid monthly backup marker.")
+    name = _valid_filename(filename)
+    pathname = PREFIX + "monthly/" + month + "/" + name + ".done"
+    return _blob().put_blob(
+        pathname,
+        b"verified",
+        access="private",
+        content_type="text/plain",
+        add_random_suffix=False,
+    )
+
+
+def delete_monthly_backup_marker(pathname):
+    if not isinstance(pathname, str) or not pathname.startswith(PREFIX + "monthly/"):
+        raise RuntimeError("Invalid monthly marker path.")
+    _blob().delete_blob(pathname)
+
+
 def _upload_blob(blob, pathname, payload):
     options = {
         "access": "private",

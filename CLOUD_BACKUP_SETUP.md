@@ -41,9 +41,10 @@ backups cannot be decrypted.
   this is approximately 08:00-09:00 Philippines time. Vercel registers Cron
   Jobs on production deployments; test the protected endpoint manually on
   Preview deployments.
-- The monthly route uses a TiDB advisory lock and an activity-log marker so a
+- The monthly route uses a TiDB advisory lock and a private Blob marker so a
   repeated invocation in the same month reuses the verified archive instead
-  of creating another scheduled copy.
+  of creating another scheduled copy. Marker objects are separate from the
+  five retained backup archives.
 - Cron endpoint: /api/cron/monthly-backup; requires Authorization: Bearer
   followed by CRON_SECRET.
 - Restore first creates a safety backup, verifies checksum/authentication and
