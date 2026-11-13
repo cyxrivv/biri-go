@@ -132,6 +132,11 @@ def acquire_database_write_guard():
     """Serialize mutations so cloud restore can hold an exclusive TiDB advisory lock."""
     if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
         return
+    if not (
+        config.APP_ENV == "production"
+        or os.environ.get("CLOUD_BACKUPS_ENABLED") == "1"
+    ):
+        return
     if request.path.startswith("/api/admin/backups/") and request.path.endswith("/restore"):
         return
 
