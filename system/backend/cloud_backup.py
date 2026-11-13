@@ -283,8 +283,8 @@ def create_cloud_backup(source="manual", preserve_filename=None):
                 keep = {x.pathname for x in objects[:RETENTION_COUNT - 1]}
                 keep.add(protected)
         stale = [x.pathname for x in objects if x.pathname not in keep]
-        if stale:
-            blob.delete_blob(stale)
+        for offset in range(0, len(stale), 1000):
+            blob.delete_blob(stale[offset:offset + 1000])
     except Exception as exc:
         warning = "Backup verified, but retention cleanup failed: %s" % exc
     return {"filename": name, "size": len(payload), "created_at": snapshot["created_at"],
