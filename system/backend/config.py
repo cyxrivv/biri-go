@@ -20,6 +20,10 @@ DB_PORT = int(os.environ.get("DB_PORT", "3306"))
 DB_USER = os.environ.get("DB_USER", "root")
 DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
 DB_NAME = os.environ.get("DB_NAME", "biri_go")
+DB_SSL = os.environ.get(
+    "DB_SSL", "1" if APP_ENV == "production" else "0"
+).strip() == "1"
+DB_SSL_CA = os.environ.get("DB_SSL_CA", "").strip() or None
 
 # Development keeps the existing automatic schema setup by default.
 # Production must use a pre-migrated schema and a restricted application account.

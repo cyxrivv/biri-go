@@ -13,6 +13,10 @@ their values to Git.
 - SECRET_KEY: at least 32 random characters.
 - DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME: TiDB Cloud connection.
 - DB_AUTO_INIT=0
+- DB_SSL=1 (required for the TiDB Cloud Starter public endpoint).
+- DB_SSL_CA is optional; the app uses the certifi CA bundle if it is omitted.
+- Use the TiDB-provided prefixed username (for example, the cluster prefix plus
+  .root) rather than an unprefixed username.
 - CLOUD_BACKUP_ENCRYPTION_KEY: base64-encoded 32-byte random key (AES-256-GCM).
 - CRON_SECRET: long random secret used to authenticate the monthly cron route.
 - Connect a Private Vercel Blob store to the project. Prefer Vercel OIDC
