@@ -19,7 +19,7 @@ jobs:
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install Flask mysql-connector-python cryptography certifi
+          python -m pip install Flask mysql-connector-python cryptography certifi vercel
       - name: Compile changed Python files
         run: |
           python -m py_compile api/index.py system/backend/cloud_backup.py system/backend/routes/admin.py system/backend/config.py system/backend/db.py system/backend/main.py

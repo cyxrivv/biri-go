@@ -43,6 +43,12 @@ class CloudBackupUnitTests(unittest.TestCase):
             }],
         }
 
+    def test_blob_sdk_sync_interface_is_available(self):
+        with patch.dict(os.environ, {"BLOB_READ_WRITE_TOKEN": "test-token"}):
+            client = cloud_backup._blob()
+        for method in ("put_blob", "get_blob", "query_blobs", "delete_blob"):
+            self.assertTrue(callable(getattr(client, method, None)), method)
+
     def test_encrypt_decrypt_round_trip(self):
         plain = b"backup test payload"
         self.assertEqual(cloud_backup._decrypt(cloud_backup._encrypt(plain)), plain)
