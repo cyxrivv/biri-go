@@ -36,7 +36,12 @@ backups cannot be decrypted.
 - Larger archives use Vercel Blob multipart upload. Each upload is downloaded
   again and checked before it is counted as successful.
 - The service retains the newest five verified cloud archives.
-- Monthly schedule: 0 0 1 * * (00:00 UTC on the first day of each month).
+- Monthly schedule: 0 0 1 * * (scheduled for 00:00 UTC on the first day of
+  each month). Hobby Cron execution can fall within a roughly 1-hour window;
+  this is approximately 08:00-09:00 Philippines time.
+- The monthly route uses a TiDB advisory lock and an activity-log marker so a
+  repeated invocation in the same month reuses the verified archive instead
+  of creating another scheduled copy.
 - Cron endpoint: /api/cron/monthly-backup; requires Authorization: Bearer
   followed by CRON_SECRET.
 - Restore first creates a safety backup, verifies checksum/authentication and
