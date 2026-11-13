@@ -141,7 +141,7 @@ async function deleteBackup(filename) {
 
 async function restoreBackup(filename) {
     if (!confirm(
-        "Restore this backup? The current database will be replaced. " +
+        "Restore this backup? Current table data will be replaced after validation. " +
         "A safety backup will be created first.\\n\\n" + filename
     )) return;
     const confirmation = prompt('Type RESTORE to continue:');
@@ -152,9 +152,9 @@ async function restoreBackup(filename) {
     try {
         const result = await api(
             "/api/admin/backups/" + encodeURIComponent(filename) + "/restore",
-            { method: "POST", body: "{}" }
+            { method: "POST", body: JSON.stringify({ confirmation: "RESTORE" }) }
         );
-        toast("Database restored. Safety backup: " + result.safety_backup);
+        toast("Database restored. Safety backup: " + (result.safety_backup || "created"));
         await Promise.all([loadDashboard(), loadEmployees(), loadBackups()]);
     } catch (err) {
         toast(err.message, "error");
