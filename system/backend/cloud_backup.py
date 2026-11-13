@@ -192,8 +192,13 @@ def _decode(payload, filename=None):
         raise RuntimeError("Unsupported backup format.")
     if snapshot.get("database") != config.DB_NAME:
         raise RuntimeError("Backup belongs to a different database.")
-    if not isinstance(snapshot.get("tables"), list) or not snapshot["tables"]:
+    tables = snapshot.get("tables")
+    if not isinstance(tables, list) or not tables:
         raise RuntimeError("Backup contains no tables.")
+    if snapshot.get("table_count") != len(tables):
+        raise RuntimeError("Backup manifest table count is inconsistent.")
+    if snapshot.get("row_count") != sum(len(t.get("rows", [])) for t in tables):
+        raise RuntimeError("Backup manifest row count is inconsistent.")
     return snapshot
 
 
@@ -215,7 +220,7 @@ def list_cloud_backups():
     return sorted(items, key=lambda x: x["created_at"], reverse=True)
 
 
-def create_cloud_backup(source="manual"):
+def create_cloud_backup(source="manual", preserve_filename=None):
     snapshot = _capture()
     snapshot["source"] = source
     payload = _archive(snapshot)
@@ -231,7 +236,13 @@ def create_cloud_backup(source="manual"):
     warning = None
     try:
         objects = sorted(_objects(), key=lambda x: x.uploaded_at, reverse=True)
-        stale = [x.pathname for x in objects[RETENTION_COUNT:]]
+        keep = {x.pathname for x in objects[:RETENTION_COUNT]}
+        if preserve_filename:
+            protected = PREFIX + _valid_filename(preserve_filename)
+            if protected in {x.pathname for x in objects} and protected not in keep:
+                keep = {x.pathname for x in objects[:RETENTION_COUNT - 1]}
+                keep.add(protected)
+        stale = [x.pathname for x in objects if x.pathname not in keep]
         if stale:
             blob.delete_blob(stale)
     except Exception as exc:
@@ -283,6 +294,8 @@ def _restore_data(snapshot):
                 columns = table.get("columns")
                 if not isinstance(columns, list) or not columns:
                     raise RuntimeError("Backup has invalid column metadata for %s." % name)
+                for column in columns:
+                    _ident(column)
                 sql = "INSERT INTO %s (%s) VALUES (%s)" % (
                     _ident(name), ", ".join(_ident(c) for c in columns),
                     ", ".join(["%s"] * len(columns)))

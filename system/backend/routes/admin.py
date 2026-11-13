@@ -626,7 +626,7 @@ def restore_admin_backup(filename):
     try:
         if _cloud_backup_enabled():
             from cloud_backup import create_cloud_backup, restore_cloud_backup
-            safety = create_cloud_backup(source="pre-restore")
+            safety = create_cloud_backup(source="pre-restore", preserve_filename=filename)
             restored = restore_cloud_backup(filename)
             with db() as (_, cur):
                 log_activity(cur, "Admin restored database from cloud backup %s" % filename)
