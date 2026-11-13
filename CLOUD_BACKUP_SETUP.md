@@ -33,8 +33,8 @@ backups cannot be decrypted.
 
 - Manual backups and the monthly cron create AES-256-GCM encrypted,
   gzip-compressed archives in private Vercel Blob storage.
-- Each upload is downloaded again and checked before it is counted as
-  successful.
+- Larger archives use Vercel Blob multipart upload. Each upload is downloaded
+  again and checked before it is counted as successful.
 - The service retains the newest five verified cloud archives.
 - Monthly schedule: 0 0 1 * * (00:00 UTC on the first day of each month).
 - Cron endpoint: /api/cron/monthly-backup; requires Authorization: Bearer

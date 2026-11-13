@@ -46,7 +46,7 @@ class CloudBackupUnitTests(unittest.TestCase):
     def test_blob_sdk_sync_interface_is_available(self):
         with patch.dict(os.environ, {"BLOB_READ_WRITE_TOKEN": "test-token"}):
             client = cloud_backup._blob()
-        for method in ("put_blob", "get_blob", "query_blobs", "delete_blob"):
+        for method in ("put_blob", "get_blob", "query_blobs", "delete_blob", "multipart_upload_blob"):
             self.assertTrue(callable(getattr(client, method, None)), method)
 
     def test_encrypt_decrypt_round_trip(self):

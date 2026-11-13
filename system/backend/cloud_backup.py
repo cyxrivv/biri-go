@@ -221,6 +221,20 @@ def list_cloud_backups():
     return sorted(items, key=lambda x: x["created_at"], reverse=True)
 
 
+def _upload_blob(blob, pathname, payload):
+    options = {
+        "access": "private",
+        "content_type": "application/octet-stream",
+    }
+    if len(payload) > 5 * 1024 * 1024:
+        # Multipart is more reliable for larger archives; a single 64 MiB
+        # part is within Vercel Blob's multipart part-size limit.
+        with blob.multipart_upload_blob(pathname, **options) as upload:
+            upload.upload_part(payload)
+        return upload.result
+    return blob.put_blob(pathname, payload, **options)
+
+
 def create_cloud_backup(source="manual", preserve_filename=None):
     snapshot = _capture()
     snapshot["source"] = source
@@ -228,8 +242,7 @@ def create_cloud_backup(source="manual", preserve_filename=None):
     name = _filename(payload)
     pathname = PREFIX + name
     blob = _blob()
-    uploaded = blob.put_blob(pathname, payload, access="private",
-                             content_type="application/octet-stream")
+    uploaded = _upload_blob(blob, pathname, payload)
     downloaded = blob.get_blob(uploaded.pathname, access="private").body
     checked = _decode(downloaded, name)
     if checked["table_count"] != snapshot["table_count"]:
