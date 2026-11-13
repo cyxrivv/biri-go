@@ -1,4 +1,5 @@
 import base64, gzip, hashlib, hmac, json, os, re
+from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 
@@ -261,7 +262,27 @@ def _schema(cur):
     return {name: _normalise_ddl(_ddl(cur, name)) for name in _tables(cur)}
 
 
-def _restore_data(snapshot):
+@contextmanager
+def cloud_restore_lock():
+    """Hold the TiDB advisory lock across safety backup and restore."""
+    with db() as (_, cur):
+        cur.execute("SELECT GET_LOCK(%s, 30) AS acquired", (config.DB_WRITE_LOCK_NAME,))
+        row = cur.fetchone()
+        if not row or int(row.get("acquired") or 0) != 1:
+            raise RuntimeError("Could not acquire the database restore lock; retry shortly.")
+        try:
+            yield
+        finally:
+            try:
+                cur.execute("SELECT RELEASE_LOCK(%s)", (config.DB_WRITE_LOCK_NAME,))
+            except Exception:
+                pass
+
+
+def _restore_data(snapshot, lock_held=False):
+    if not lock_held:
+        with cloud_restore_lock():
+            return _restore_data(snapshot, lock_held=True)
     archive = {}
     for item in snapshot["tables"]:
         name = item.get("name")
@@ -338,8 +359,11 @@ def verify_cloud_backup(filename):
     return {"table_count": snapshot["table_count"], "row_count": snapshot["row_count"]}
 
 
-def restore_cloud_backup(filename):
+def restore_cloud_backup(filename, lock_held=False):
     name = _valid_filename(filename)
     payload = _blob().get_blob(PREFIX + name, access="private").body
     snapshot = _decode(payload, name)
-    return {**_restore_data(snapshot), "created_at": snapshot.get("created_at")}
+    return {
+        **_restore_data(snapshot, lock_held=lock_held),
+        "created_at": snapshot.get("created_at"),
+    }

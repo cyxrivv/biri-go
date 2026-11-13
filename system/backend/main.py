@@ -6,7 +6,7 @@ from decimal import Decimal, InvalidOperation
 import mysql.connector
 from flask import Flask, jsonify, render_template
 from flask import session, redirect
-from flask import request
+from flask import request, g
 from werkzeug.exceptions import HTTPException
 import secrets
 import os
@@ -15,7 +15,7 @@ import time
 
 import config
 from auth import role_required
-from db import init_db, db, log_activity
+from db import init_db, db, log_activity, get_pool
 from utils import ApiError, AppJSONProvider, EMAIL_RE, EMPLOYEE_STATUSES
 from routes.employee import employee_bp
 from routes.admin import admin_bp
@@ -125,6 +125,60 @@ def csrf_protect():
 
     if not hmac.compare_digest(token, session_token):
         return jsonify(error="Invalid CSRF token."), 403
+
+
+@app.before_request
+def acquire_database_write_guard():
+    """Serialize mutations so cloud restore can hold an exclusive TiDB advisory lock."""
+    if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
+        return
+    if request.path.startswith("/api/admin/backups/") and request.path.endswith("/restore"):
+        return
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_pool().get_connection()
+        cursor = connection.cursor()
+        cursor.execute("SELECT GET_LOCK(%s, 5)", (config.DB_WRITE_LOCK_NAME,))
+        row = cursor.fetchone()
+        if not row or int(row[0] or 0) != 1:
+            cursor.close()
+            connection.close()
+            return jsonify(error="The database is busy. Please retry this action shortly."), 503
+        g._db_write_guard_connection = connection
+        g._db_write_guard_cursor = cursor
+    except Exception:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if connection:
+            try:
+                connection.close()
+            except Exception:
+                pass
+        app.logger.exception("Could not acquire the database write guard")
+        return jsonify(error="Could not safely start this database write. Please retry."), 503
+
+
+@app.after_request
+def release_database_write_guard(response):
+    cursor = getattr(g, "_db_write_guard_cursor", None)
+    connection = getattr(g, "_db_write_guard_connection", None)
+    if cursor and connection:
+        try:
+            cursor.execute("SELECT RELEASE_LOCK(%s)", (config.DB_WRITE_LOCK_NAME,))
+        except Exception:
+            app.logger.exception("Could not explicitly release database write guard")
+        finally:
+            try:
+                cursor.close()
+            finally:
+                connection.close()
+    return response
+
 
 @app.errorhandler(ApiError)
 def handle_api_error(e):

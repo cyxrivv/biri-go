@@ -46,6 +46,9 @@ backups cannot be decrypted.
 - If schema matches, table rows are replaced in one DML transaction. A failed
   transaction is rolled back. The restore path never drops/recreates the TiDB
   database and never executes archived DDL.
+- A TiDB advisory lock is held from pre-restore validation through the safety
+  backup and restore. Normal application write requests acquire the same lock,
+  so they wait briefly or receive HTTP 503 while restore is in progress.
 - CLOUD_BACKUP_MAX_BYTES defaults to 64 MiB. Keep archives within the Vercel
   Function memory and execution-time limits.
 

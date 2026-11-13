@@ -625,19 +625,30 @@ def restore_admin_backup(filename):
 
     try:
         if _cloud_backup_enabled():
-            from cloud_backup import create_cloud_backup, restore_cloud_backup, verify_cloud_backup
-            verify_cloud_backup(filename)
-            safety = create_cloud_backup(source="pre-restore", preserve_filename=filename)
-            restored = restore_cloud_backup(filename)
-            try:
-                with db() as (_, cur):
-                    log_activity(cur, "Admin restored database from cloud backup %s" % filename)
-            except Exception:
-                current_app.logger.exception(
-                    "Database restore succeeded, but the audit activity could not be recorded."
+            from cloud_backup import (
+                cloud_restore_lock, create_cloud_backup,
+                restore_cloud_backup, verify_cloud_backup,
+            )
+            with cloud_restore_lock():
+                verify_cloud_backup(filename)
+                safety = create_cloud_backup(
+                    source="pre-restore", preserve_filename=filename
                 )
-            return jsonify(message="Database contents restored successfully.",
-                           safety_backup=safety["filename"], restored=restored)
+                restored = restore_cloud_backup(filename, lock_held=True)
+                try:
+                    with db() as (_, cur):
+                        log_activity(
+                            cur, "Admin restored database from cloud backup %s" % filename
+                        )
+                except Exception:
+                    current_app.logger.exception(
+                        "Database restore succeeded, but the audit activity could not be recorded."
+                    )
+            return jsonify(
+                message="Database contents restored successfully.",
+                safety_backup=safety["filename"],
+                restored=restored,
+            )
 
         path = _backup_file(filename)
         verify_backup(path)

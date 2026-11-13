@@ -22,6 +22,6 @@ jobs:
           python -m pip install Flask mysql-connector-python cryptography certifi
       - name: Compile changed Python files
         run: |
-          python -m py_compile api/index.py system/backend/cloud_backup.py system/backend/routes/admin.py system/backend/config.py system/backend/db.py
+          python -m py_compile api/index.py system/backend/cloud_backup.py system/backend/routes/admin.py system/backend/config.py system/backend/db.py system/backend/main.py
       - name: Run cloud backup unit tests
         run: python -m unittest discover -s system/backend/tests -v
