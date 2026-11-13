@@ -58,7 +58,7 @@ def _json_default(value):
     if isinstance(value, time):
         return {"__biri_time__": value.isoformat()}
     if isinstance(value, timedelta):
-        return {"__biri_timedelta__": str(value)}
+        return {"__biri_timedelta_us__": int(value.total_seconds() * 1000000)}
     if isinstance(value, (bytes, bytearray, memoryview)):
         return {"__biri_bytes__": base64.b64encode(bytes(value)).decode("ascii")}
     raise TypeError("Unsupported database value: %s" % type(value).__name__)
@@ -74,8 +74,8 @@ def _json_hook(value):
             return date.fromisoformat(value["__biri_date__"])
         if "__biri_time__" in value:
             return time.fromisoformat(value["__biri_time__"])
-        if "__biri_timedelta__" in value:
-            return value["__biri_timedelta__"]
+        if "__biri_timedelta_us__" in value:
+            return timedelta(microseconds=int(value["__biri_timedelta_us__"]))
     return value
 
 
@@ -106,16 +106,35 @@ def _ddl(cur, name):
     return list(row.values())[-1]
 
 
+def _table_columns(cur, name):
+    cur.execute(
+        "SELECT COLUMN_NAME, EXTRA FROM information_schema.columns "
+        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s ORDER BY ORDINAL_POSITION",
+        (name,),
+    )
+    return [
+        row["COLUMN_NAME"] for row in cur.fetchall()
+        if "GENERATED" not in str(row.get("EXTRA", "")).upper()
+    ]
+
+
 def _capture():
     result, total = [], 0
     with db() as (conn, cur):
         cur.execute("START TRANSACTION WITH CONSISTENT SNAPSHOT")
         for name in _tables(cur):
             create_sql = _ddl(cur, name)
-            cur.execute("SELECT * FROM %s" % _ident(name))
+            columns = _table_columns(cur, name)
+            if not columns:
+                raise RuntimeError("Table %s has no restorable columns." % name)
+            select_columns = ", ".join(_ident(column) for column in columns)
+            cur.execute("SELECT %s FROM %s" % (select_columns, _ident(name)))
             rows = cur.fetchall()
             total += len(rows)
-            result.append({"name": name, "create_sql": create_sql, "rows": rows})
+            result.append({
+                "name": name, "create_sql": create_sql,
+                "columns": columns, "rows": rows,
+            })
     return {
         "format_version": FORMAT_VERSION,
         "database": config.DB_NAME,
@@ -248,6 +267,9 @@ def _restore_data(snapshot):
             if current[name] != archived[name]:
                 raise RuntimeError("Schema for table %s differs; no data was changed." % name)
         try:
+            # Schema inspection opened a read transaction on the pooled connection.
+            # End it before beginning the all-or-nothing data replacement transaction.
+            conn.rollback()
             cur.execute("SET FOREIGN_KEY_CHECKS = 0")
             conn.start_transaction()
             for name in reversed(list(archive)):
@@ -258,7 +280,9 @@ def _restore_data(snapshot):
                 counts[name] = len(rows)
                 if not rows:
                     continue
-                columns = list(rows[0].keys())
+                columns = table.get("columns")
+                if not isinstance(columns, list) or not columns:
+                    raise RuntimeError("Backup has invalid column metadata for %s." % name)
                 sql = "INSERT INTO %s (%s) VALUES (%s)" % (
                     _ident(name), ", ".join(_ident(c) for c in columns),
                     ", ".join(["%s"] * len(columns)))
