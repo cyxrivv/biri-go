@@ -1,27 +1,34 @@
-"""Profile pictures for every account (admin, hr, owner, employee).
+"""Profile pictures for every account (admin, HR, owner, employee).
 
-Put this file in: system/backend/profile_pictures.py
+Desktop builds keep profile pictures on disk. Vercel deployments use private
+Vercel Blob storage because the function filesystem is read-only and ephemeral.
 """
 import io
 import os
 import sys
 import uuid
+from urllib.parse import quote
 
-from flask import Blueprint, abort, jsonify, request, send_from_directory, session
+from flask import Blueprint, Response, abort, jsonify, request, session
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from db import db
 from utils import ApiError
 
-MAX_UPLOAD_BYTES = 2 * 1024 * 1024          # 2 MB
+MAX_UPLOAD_BYTES = 2 * 1024 * 1024
 ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP"}
-AVATAR_SIZE = 256                            # saved as 256x256
+AVATAR_SIZE = 256
 DEFAULT_AVATAR_URL = "/statistics/images/default-avatar.png"
-Image.MAX_IMAGE_PIXELS = 30_000_000          # refuse absurdly large images
+BLOB_PREFIX = "profile-pictures/"
+Image.MAX_IMAGE_PIXELS = 30_000_000
+
+
+def _is_vercel_runtime():
+    return os.environ.get("VERCEL") == "1" or bool(os.environ.get("VERCEL_ENV"))
 
 
 def _upload_dir():
-    # Packaged .exe: the bundle is temporary, so store pictures next to the .exe.
+    # Packaged .exe: keep pictures next to the executable.
     if getattr(sys, "frozen", False):
         base = os.path.join(os.path.dirname(sys.executable), "uploads", "profile_pics")
     else:
@@ -32,9 +39,19 @@ def _upload_dir():
     return base
 
 
-UPLOAD_DIR = _upload_dir()
+# Never create directories in Vercel's read-only /var/task filesystem.
+UPLOAD_DIR = None if _is_vercel_runtime() else _upload_dir()
 
-profile_bp = Blueprint("profile", __name__)
+
+def _blob():
+    if not (os.getenv("BLOB_READ_WRITE_TOKEN") or
+            (os.getenv("VERCEL_OIDC_TOKEN") and os.getenv("BLOB_STORE_ID"))):
+        raise RuntimeError("Private Vercel Blob storage is not connected to this project.")
+    try:
+        from vercel.blob import sync as blob
+    except ImportError as exc:
+        raise RuntimeError("Install the Vercel Python SDK (vercel>=0.5.0).") from exc
+    return blob
 
 
 def _require_login():
@@ -45,12 +62,23 @@ def _require_login():
 
 
 def _url_for(filename):
-    return "/profile-pictures/" + filename if filename else DEFAULT_AVATAR_URL
+    if not filename:
+        return DEFAULT_AVATAR_URL
+    return "/profile-pictures/" + quote(str(filename), safe="/")
 
 
 def _delete_file(filename):
     if not filename:
         return
+    if _is_vercel_runtime():
+        # Blob deletion is idempotent; ignore cleanup errors after DB changes.
+        try:
+            if str(filename).startswith(BLOB_PREFIX):
+                _blob().delete_blob(filename)
+        except Exception:
+            pass
+        return
+
     path = os.path.join(UPLOAD_DIR, os.path.basename(filename))
     try:
         os.remove(path)
@@ -59,7 +87,7 @@ def _delete_file(filename):
 
 
 def _process_image(file_storage, account_id):
-    """Validate the upload, crop it to a square, and save it. Returns the new filename."""
+    """Validate and normalize an uploaded image, then persist it."""
     raw = file_storage.read(MAX_UPLOAD_BYTES + 1)
     if not raw:
         raise ApiError("No file selected.")
@@ -70,15 +98,35 @@ def _process_image(file_storage, account_id):
         img = Image.open(io.BytesIO(raw))
         if img.format not in ALLOWED_FORMATS:
             raise ApiError("Only PNG, JPG or WEBP images are allowed.")
-        img = ImageOps.exif_transpose(img)           # fix phone-photo rotation
-        img = img.convert("RGB")                     # drops transparency / metadata
-        img = ImageOps.fit(img, (AVATAR_SIZE, AVATAR_SIZE), Image.LANCZOS)  # center-crop + resize
+        img = ImageOps.exif_transpose(img)
+        img = img.convert("RGB")
+        img = ImageOps.fit(img, (AVATAR_SIZE, AVATAR_SIZE), Image.LANCZOS)
     except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
         raise ApiError("That file is not a valid image.")
 
-    filename = "%s_%s.jpg" % (account_id, uuid.uuid4().hex)
-    img.save(os.path.join(UPLOAD_DIR, filename), "JPEG", quality=85)
-    return filename
+    output = io.BytesIO()
+    img.save(output, "JPEG", quality=85)
+    image_bytes = output.getvalue()
+    unique_name = "%s_%s.jpg" % (account_id, uuid.uuid4().hex)
+
+    if _is_vercel_runtime():
+        pathname = BLOB_PREFIX + str(account_id) + "/" + unique_name
+        uploaded = _blob().put_blob(
+            pathname,
+            image_bytes,
+            access="private",
+            content_type="image/jpeg",
+            add_random_suffix=False,
+        )
+        return uploaded.pathname
+
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    with open(os.path.join(UPLOAD_DIR, unique_name), "wb") as image_file:
+        image_file.write(image_bytes)
+    return unique_name
+
+
+profile_bp = Blueprint("profile", __name__)
 
 
 @profile_bp.route("/account/profile-picture", methods=["GET"])
@@ -113,7 +161,7 @@ def upload_profile_picture():
                 (new_name, account_id),
             )
     except Exception:
-        _delete_file(new_name)      # don't leave an orphan file if the DB step failed
+        _delete_file(new_name)
         raise
 
     _delete_file(old_name)
@@ -135,9 +183,24 @@ def remove_profile_picture():
 
 @profile_bp.route("/profile-pictures/<path:filename>")
 def serve_profile_picture(filename):
-    """Serve saved pictures to signed-in users only."""
+    """Serve private cloud pictures only to authenticated accounts."""
     if not session.get("account_id"):
         abort(403)
-    resp = send_from_directory(UPLOAD_DIR, filename)   # blocks ../ path tricks
-    resp.headers["Cache-Control"] = "private, max-age=86400"  # filenames are unique per upload
-    return resp
+
+    if _is_vercel_runtime():
+        # Restrict reads to the avatar namespace; never expose backup objects.
+        parts = filename.split("/")
+        if (not filename.startswith(BLOB_PREFIX) or
+                any(part in ("", ".", "..") for part in parts)):
+            abort(404)
+        result = _blob().get_blob(filename, access="private")
+        if result is None or result.metadata.status_code != 200:
+            abort(404)
+        response = Response(result.body, mimetype=result.metadata.content_type or "image/jpeg")
+    else:
+        from flask import send_from_directory
+        response = send_from_directory(UPLOAD_DIR, filename)
+
+    response.headers["Cache-Control"] = "private, max-age=300"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
