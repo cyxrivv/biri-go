@@ -176,13 +176,22 @@ def release_database_write_guard(response):
     if cursor and connection:
         try:
             cursor.execute("SELECT RELEASE_LOCK(%s)", (config.DB_WRITE_LOCK_NAME,))
+            # SELECT statements leave a result set pending. Consume it before
+            # closing the cursor or returning the connection to the pool.
+            cursor.fetchone()
         except Exception:
             app.logger.exception("Could not explicitly release database write guard")
         finally:
             try:
                 cursor.close()
-            finally:
+            except Exception:
+                # Cleanup must not replace the response or mask the original error.
+                app.logger.exception("Could not close database write-guard cursor")
+            try:
                 connection.close()
+            except Exception:
+                # A broken connection must not turn response finalization into a 500.
+                app.logger.exception("Could not return database write-guard connection to pool")
     return response
 
 
