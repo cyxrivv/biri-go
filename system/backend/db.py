@@ -12,6 +12,16 @@ DB_CONFIG = {
     "database": config.DB_NAME,
 }
 
+if config.DB_SSL:
+    import certifi
+
+    DB_CONFIG.update(
+        ssl_disabled=False,
+        ssl_verify_cert=True,
+        ssl_verify_identity=True,
+        ssl_ca=config.DB_SSL_CA or certifi.where(),
+    )
+
 _pool = None
 
 

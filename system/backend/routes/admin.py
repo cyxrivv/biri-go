@@ -533,7 +533,15 @@ def reject_employee_request(request_id):
 
 
 # --------------------------------------------------------------------------
+# Database backups (desktop-local or cloud storage)
+# --------------------------------------------------------------------------
 _BACKUP_NAME_RE = re.compile(r"^biri_go_\d{8}_\d{6}_\d{6}\.sql\.gz$")
+
+
+def _cloud_backup_enabled():
+    import os
+    import config
+    return config.APP_ENV == "production" or os.environ.get("CLOUD_BACKUPS_ENABLED") == "1"
 
 
 def _backup_file(filename):
@@ -549,6 +557,14 @@ def _backup_file(filename):
 @admin_bp.get("/api/admin/backups")
 @role_required("admin")
 def list_backups():
+    if _cloud_backup_enabled():
+        try:
+            from cloud_backup import list_cloud_backups
+            return jsonify(items=list_cloud_backups())
+        except Exception:
+            current_app.logger.exception("Could not list cloud backups")
+            raise ApiError("Could not load cloud backups. Check Blob configuration.", 500)
+
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     items = []
     for path in BACKUP_DIR.iterdir():
@@ -568,13 +584,14 @@ def list_backups():
 @role_required("admin")
 def create_admin_backup():
     try:
+        if _cloud_backup_enabled():
+            from cloud_backup import create_cloud_backup
+            backup = create_cloud_backup(source="manual")
+            return jsonify(message="Encrypted cloud backup created and verified.", backup=backup), 201
         path = create_backup()
     except Exception:
         current_app.logger.exception("Admin database backup failed")
-        raise ApiError(
-            "Could not create a database backup. Check the MySQL client tools and database permissions.",
-            500,
-        )
+        raise ApiError("Could not create a database backup. Check backup configuration and permissions.", 500)
     return jsonify(
         message="Backup created successfully.",
         backup={"filename": path.name, "size": path.stat().st_size},
@@ -584,10 +601,16 @@ def create_admin_backup():
 @admin_bp.delete("/api/admin/backups/<filename>")
 @role_required("admin")
 def delete_admin_backup(filename):
-    path = _backup_file(filename)
     try:
+        if _cloud_backup_enabled():
+            from cloud_backup import delete_cloud_backup
+            delete_cloud_backup(filename)
+            return jsonify(message="Cloud backup deleted.")
+        path = _backup_file(filename)
         path.unlink()
-    except OSError:
+    except ApiError:
+        raise
+    except Exception:
         current_app.logger.exception("Admin could not delete backup %s", filename)
         raise ApiError("Could not delete the selected backup.", 500)
     return jsonify(message="Backup deleted.")
@@ -596,33 +619,109 @@ def delete_admin_backup(filename):
 @admin_bp.post("/api/admin/backups/<filename>/restore")
 @role_required("admin")
 def restore_admin_backup(filename):
-    path = _backup_file(filename)
-    try:
-        # Prove the archive can be imported before touching the live database.
-        verify_backup(path)
+    body = request.get_json(silent=True) or {}
+    if body.get("confirmation") != "RESTORE":
+        raise ApiError("Restore cancelled. Explicit confirmation is required.", 400)
 
-        # A dropped schema cannot be dumped. Preserve it when it still exists;
-        # when it is already missing, proceed directly to schema recreation.
+    try:
+        if _cloud_backup_enabled():
+            from cloud_backup import (
+                cloud_restore_lock, create_cloud_backup,
+                restore_cloud_backup, verify_cloud_backup,
+            )
+            with cloud_restore_lock():
+                verify_cloud_backup(filename)
+                safety = create_cloud_backup(
+                    source="pre-restore", preserve_filename=filename
+                )
+                restored = restore_cloud_backup(filename, lock_held=True)
+                try:
+                    with db() as (_, cur):
+                        log_activity(
+                            cur, "Admin restored database from cloud backup %s" % filename
+                        )
+                except Exception:
+                    current_app.logger.exception(
+                        "Database restore succeeded, but the audit activity could not be recorded."
+                    )
+            return jsonify(
+                message="Database contents restored successfully.",
+                safety_backup=safety["filename"],
+                restored=restored,
+            )
+
+        path = _backup_file(filename)
+        verify_backup(path)
+        safety_backup_name = None
         if database_exists():
             safety_backup = create_backup()
             safety_backup_name = safety_backup.name
-        else:
-            safety_backup_name = None
-
-        # restore_backup recreates the schema before importing the verified dump.
         restore_backup(path, CONFIRM_TEXT)
+    except ApiError:
+        raise
     except Exception:
         current_app.logger.exception("Admin database restore failed for %s", filename)
         raise ApiError(
-            "Restore did not complete. A safety backup may have been created; "
-            "inspect the database and server logs before retrying.",
+            "Restore did not complete. The operation was stopped or rolled back; "
+            "check the server logs before retrying.",
             500,
         )
-    return jsonify(
-        message=(
-            "Database restored successfully."
-            if safety_backup_name
-            else "Database restored successfully. The missing schema was recreated; no safety backup was possible."
-        ),
-        safety_backup=safety_backup_name,
-    )
+    return jsonify(message="Database restored successfully.", safety_backup=safety_backup_name)
+
+
+@admin_bp.get("/api/cron/monthly-backup")
+def monthly_cloud_backup():
+    import hmac
+    import os
+    import config
+
+    secret = os.environ.get("CRON_SECRET", "")
+    supplied = request.headers.get("Authorization", "")
+    if not secret:
+        return jsonify(error="CRON_SECRET is not configured."), 503
+    if not hmac.compare_digest(supplied, "Bearer " + secret):
+        return jsonify(error="Unauthorized."), 401
+    if not _cloud_backup_enabled():
+        return jsonify(error="Cloud backups are not enabled."), 503
+
+    month = datetime.utcnow().strftime("%Y-%m")
+    lock_name = ("biri_go_monthly_" + config.DB_NAME + "_" + month.replace("-", ""))[:64]
+    try:
+        from cloud_backup import (
+            create_cloud_backup, create_monthly_backup_marker,
+            delete_monthly_backup_marker, list_monthly_backup_markers,
+            verify_cloud_backup,
+        )
+        with db() as (_, cur):
+            cur.execute("SELECT GET_LOCK(%s, 5) AS acquired", (lock_name,))
+            lock_row = cur.fetchone()
+            if not lock_row or int(lock_row.get("acquired") or 0) != 1:
+                return jsonify(error="A monthly backup is already running. Retry shortly."), 503
+            try:
+                # Marker objects live separately from the five retained archives.
+                # A repeated invocation reuses the existing verified monthly archive.
+                for marker in list_monthly_backup_markers(month):
+                    filename = marker.pathname.rsplit("/", 1)[-1].removesuffix(".done")
+                    try:
+                        verify_cloud_backup(filename)
+                        return jsonify(
+                            message="Monthly backup already completed.",
+                            backup={"filename": filename, "already_exists": True},
+                        )
+                    except Exception:
+                        delete_monthly_backup_marker(marker.pathname)
+
+                result = create_cloud_backup(source="scheduled")
+                create_monthly_backup_marker(month, result["filename"])
+                current_app.logger.info(
+                    "Monthly cloud backup completed: %s", result["filename"]
+                )
+                return jsonify(message="Monthly backup completed.", backup=result)
+            finally:
+                try:
+                    cur.execute("SELECT RELEASE_LOCK(%s)", (lock_name,))
+                except Exception:
+                    current_app.logger.exception("Could not release monthly backup lock")
+    except Exception:
+        current_app.logger.exception("Scheduled cloud backup failed")
+        return jsonify(error="Scheduled backup failed. Check server logs."), 500
